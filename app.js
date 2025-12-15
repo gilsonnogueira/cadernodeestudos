@@ -1287,57 +1287,56 @@ setupEventListeners() {
         });
     }
 
-    // Add Logout Button logic (needs to be inserted in UI first, but here represents the handler)
-    // We will add a User Menu later.
-    toggleFilters.textContent = isHidden ? '👁️ Ocultar' : '🔍 Mostrar Filtros';
-});
-        }
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) {
+        btnLogout.addEventListener('click', () => this.handleLogout());
+    }
 
-document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
 
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.view-section').forEach(v => v.style.display = 'none');
+            const tab = btn.dataset.tab;
+            document.querySelectorAll('.view-section').forEach(v => v.style.display = 'none');
 
-        if (tab === 'questions') document.getElementById('questions-view').style.display = 'block';
-        else if (tab === 'performance') document.getElementById('performance-view').style.display = 'block';
+            if (tab === 'questions') document.getElementById('questions-view').style.display = 'block';
+            else if (tab === 'performance') document.getElementById('performance-view').style.display = 'block';
+        });
     });
-});
 
-// NEW SORT EVENT LISTENERS
-document.getElementById('toggle-sort-options').addEventListener('click', () => {
-    const panel = document.getElementById('sort-options-panel');
-    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-});
+    // NEW SORT EVENT LISTENERS
+    document.getElementById('toggle-sort-options').addEventListener('click', () => {
+        const panel = document.getElementById('sort-options-panel');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
 
-document.getElementById('sort-pedagogical').addEventListener('change', (e) => {
-    this.sortSettings.pedagogical = e.target.checked;
-    document.getElementById('pedagogical-suboptions').style.display = e.target.checked ? 'block' : 'none';
-    this.applyFilters();
-});
-
-document.getElementById('sort-repeat').addEventListener('change', (e) => {
-    this.sortSettings.repeat = e.target.checked;
-    document.getElementById('priority-options').style.display = e.target.checked ? 'none' : 'block';
-    this.applyFilters();
-});
-
-document.querySelectorAll('input[name="sort-priority"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        this.sortSettings.priority = e.target.value;
+    document.getElementById('sort-pedagogical').addEventListener('change', (e) => {
+        this.sortSettings.pedagogical = e.target.checked;
+        document.getElementById('pedagogical-suboptions').style.display = e.target.checked ? 'block' : 'none';
         this.applyFilters();
     });
-});
 
-// EXPORT LISTENERS
-const btnExportMD = document.getElementById('btn-export-markdown');
-if (btnExportMD) btnExportMD.addEventListener('click', () => this.exportToMarkdown());
+    document.getElementById('sort-repeat').addEventListener('change', (e) => {
+        this.sortSettings.repeat = e.target.checked;
+        document.getElementById('priority-options').style.display = e.target.checked ? 'none' : 'block';
+        this.applyFilters();
+    });
 
-const btnExportDocx = document.getElementById('btn-export-docx');
-if (btnExportDocx) btnExportDocx.addEventListener('click', () => this.exportToDocx());
-    }
+    document.querySelectorAll('input[name="sort-priority"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            this.sortSettings.priority = e.target.value;
+            this.applyFilters();
+        });
+    });
+
+    // EXPORT LISTENERS
+    const btnExportMD = document.getElementById('btn-export-markdown');
+    if (btnExportMD) btnExportMD.addEventListener('click', () => this.exportToMarkdown());
+
+    const btnExportDocx = document.getElementById('btn-export-docx');
+    if (btnExportDocx) btnExportDocx.addEventListener('click', () => this.exportToDocx());
+}
 
 showSuccess(msg) {
     const toast = document.createElement('div');
