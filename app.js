@@ -119,26 +119,33 @@ class QuestionBank {
 
     async loadQuestionsFromJSON() {
         try {
+            // Taxonomia (com timeout para não travar)
             if (window.taxonomyManager) {
-                await window.taxonomyManager.loadTaxonomy();
-                console.log('App: Taxonomia carregada.');
+                const taxPromise = window.taxonomyManager.loadTaxonomy();
+                const timeoutPromise = new Promise(r => setTimeout(r, 2000)); // 2s timeout
+                
+                await Promise.race([taxPromise, timeoutPromise]);
+                console.log('App: Tentativa de carga da taxonomia concluída.');
             }
 
             // Retry mechanism for loading large DB
             let retries = 0;
-            const maxRetries = 20; // Wait up to 10 seconds (20 * 500ms)
+            const maxRetries = 20; // 10s
 
             const waitForDB = () => {
                 return new Promise((resolve, reject) => {
                     const check = () => {
+                        // Debug visual (remover em prod, mas útil agora)
+                        const countEl = document.getElementById('questions-found-count');
+                        if(countEl && retries > 0) countEl.innerText = `(Carregando DB... ${retries})`;
+
                         if (window.OFFLINE_QUESTIONS && Array.isArray(window.OFFLINE_QUESTIONS)) {
                             resolve(window.OFFLINE_QUESTIONS);
                         } else {
                             retries++;
                             if (retries >= maxRetries) {
-                                reject(new Error('Timeout aguardando banco de dados.'));
+                                reject(new Error('Timeout: questions_db.js não definiu window.OFFLINE_QUESTIONS'));
                             } else {
-                                console.log(`Aguardando DB... (${retries}/${maxRetries})`);
                                 setTimeout(check, 500);
                             }
                         }
