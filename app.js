@@ -124,18 +124,52 @@ class QuestionBank {
                 console.log('App: Taxonomia carregada.');
             }
 
-            if (window.OFFLINE_QUESTIONS && Array.isArray(window.OFFLINE_QUESTIONS)) {
-                const uniqueQuestions = Array.from(new Map(window.OFFLINE_QUESTIONS.map(q => [q.id, q])).values());
+            // Retry mechanism for loading large DB
+            let retries = 0;
+            const maxRetries = 20; // Wait up to 10 seconds (20 * 500ms)
 
-                this.allQuestions = window.taxonomyManager.enrichQuestionsWithTaxonomy(uniqueQuestions);
-                this.processQuestions();
-                this.populateFilters();
+            const waitForDB = () => {
+                return new Promise((resolve, reject) => {
+                    const check = () => {
+                        if (window.OFFLINE_QUESTIONS && Array.isArray(window.OFFLINE_QUESTIONS)) {
+                            resolve(window.OFFLINE_QUESTIONS);
+                        } else {
+                            retries++;
+                            if (retries >= maxRetries) {
+                                reject(new Error('Timeout aguardando banco de dados.'));
+                            } else {
+                                console.log(`Aguardando DB... (${retries}/${maxRetries})`);
+                                setTimeout(check, 500);
+                            }
+                        }
+                    };
+                    check();
+                });
+            };
+
+            const questions = await waitForDB();
+            
+            const uniqueQuestions = Array.from(new Map(questions.map(q => [q.id, q])).values());
+            console.log(`DB Carregado: ${uniqueQuestions.length} questões.`);
+
+            this.allQuestions = window.taxonomyManager.enrichQuestionsWithTaxonomy(uniqueQuestions);
+            
+            // Critical check for filters reload
+            this.processQuestions();
+            this.populateFilters();
+            
+            // If user is already on app view, apply filters now
+            if (document.getElementById('questions-view').style.display !== 'none') {
                 this.applyFilters();
-                this.showSuccess(`✅ ${this.allQuestions.length} questões carregadas.`);
-            } else {
-                console.error('window.OFFLINE_QUESTIONS não encontrado.');
-                this.showError('Erro: Banco de dados não carregado.');
             }
+            
+            this.showSuccess(`✅ ${this.allQuestions.length} questões carregadas.`);
+
+        } catch (error) {
+            console.error('Erro fatal:', error);
+            this.showError('Erro ao carregar banco de dados (Verifique se o arquivo size > 40MB foi carregado).');
+        }
+    }
         } catch (error) {
             console.error('Erro fatal:', error);
             this.showError('Erro ao inicializar.');
