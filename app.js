@@ -33,6 +33,12 @@ class QuestionBank {
 
     // --- FIREBASE INTEGRATION ---
     init() {
+        if (typeof firebase === 'undefined') {
+            console.error('Firebase SDK not loaded.');
+            document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;padding:20px;background:red;color:white;z-index:9999">ERRO CRÍTICO: Firebase não foi carregado. Verifique sua conexão ou adblocker.</div>';
+            return;
+        }
+        
         this.checkAuth();
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
