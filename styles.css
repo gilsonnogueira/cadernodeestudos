@@ -1099,20 +1099,14 @@ body.focus-mode-active .question-card.focused {
     opacity: 0.7;
 }
 
-.heart-icon {
-    color: #e25555;
-    animation: heartbeat 1.5s infinite;
-    display: inline-block;
+.footer-link {
+    color: var(--primary);
+    /* Or use text-main if prefer subtle */
+    text-decoration: none;
+    transition: color 0.2s;
 }
 
-@keyframes heartbeat {
-
-    0%,
-    100% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(1.1);
-    }
+.footer-link:hover {
+    color: var(--primary-hover);
+    text-decoration: underline;
 }
