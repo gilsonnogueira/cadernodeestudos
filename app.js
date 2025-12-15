@@ -8,7 +8,10 @@ class QuestionBank {
         this.filteredQuestions = [];
         this.currentPage = 1;
         this.questionsPerPage = 10;
+        this.currentPage = 1;
+        this.questionsPerPage = 10;
         this.userProgress = {};
+        this.currentUser = null; // Store Firebase User
 
         this.filters = {
             discipline: null,
@@ -28,22 +31,90 @@ class QuestionBank {
         this.currentFocusIndex = -1;
     }
 
+    // --- FIREBASE INTEGRATION ---
     init() {
-        this.loadUserProgress();
+        this.checkAuth();
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
-        this.loadQuestionsFromJSON();
+        this.loadQuestionsFromJSON(); // Load database immediately
     }
 
-    loadUserProgress() {
-        const saved = localStorage.getItem('userProgress_v2');
-        if (saved) {
-            this.userProgress = JSON.parse(saved);
+    checkAuth() {
+        // Observer for Auth State
+        firebase.auth().onAuthStateChanged(user => {
+            if (user) {
+                this.currentUser = user;
+                console.log('User logged in:', user.email);
+                this.showAppView();
+                this.loadUserProgress(); // Load from Firestore
+            } else {
+                this.currentUser = null;
+                console.log('No user logged in.');
+                this.showAuthView();
+            }
+        });
+    }
+
+    showAuthView() {
+        document.getElementById('auth-view').style.display = 'block';
+        document.getElementById('questions-view').style.display = 'none';
+        document.getElementById('performance-view').style.display = 'none';
+
+        // Hide filters button/nav if needed, or just overlay
+        document.querySelector('.main-nav').style.display = 'none';
+    }
+
+    showAppView() {
+        document.getElementById('auth-view').style.display = 'none';
+        document.getElementById('questions-view').style.display = 'block';
+        document.querySelector('.main-nav').style.display = 'flex';
+
+        // Trigger initial render if data is ready
+        if (this.allQuestions.length > 0) {
+            this.applyFilters();
         }
     }
 
-    saveUserProgress() {
+    async loadUserProgress() {
+        if (!this.currentUser) return;
+
+        try {
+            const docRef = firebase.firestore().collection('users').doc(this.currentUser.uid);
+            const doc = await docRef.get();
+
+            if (doc.exists) {
+                const data = doc.data();
+                this.userProgress = data.progress || {};
+                console.log('Progress loaded from Firestore.');
+
+                // Refresh View
+                if (this.allQuestions.length > 0) this.applyFilters();
+            } else {
+                console.log('No existing progress found for user.');
+                this.userProgress = {};
+            }
+        } catch (error) {
+            console.error('Error loading progress:', error);
+            this.showError('Erro ao carregar progresso da nuvem.');
+        }
+    }
+
+    async saveUserProgress() {
+        // Save locally for immediate feedback
         localStorage.setItem('userProgress_v2', JSON.stringify(this.userProgress));
+
+        if (this.currentUser) {
+            // Debounce or just save directly (Firestore writes are cheap enough for this volume)
+            try {
+                await firebase.firestore().collection('users').doc(this.currentUser.uid).set({
+                    progress: this.userProgress,
+                    lastUpdated: new Date()
+                }, { merge: true });
+                console.log('Progress saved to Firestore.');
+            } catch (error) {
+                console.error('Error saving to Firestore:', error);
+            }
+        }
     }
 
     async loadQuestionsFromJSON() {
@@ -1027,130 +1098,262 @@ class QuestionBank {
                 if (respondBtn && !respondBtn.disabled) respondBtn.click();
             }
         });
+    } // End setupKeyboardShortcuts
+
+    async handleLogin(email, password) {
+        const errorMsg = document.getElementById('auth-error-msg');
+        errorMsg.style.display = 'none';
+
+        try {
+            await firebase.auth().signInWithEmailAndPassword(email, password);
+            // Observer in checkAuth will handle the transition
+        } catch (error) {
+            console.error('Login Error:', error);
+            errorMsg.textContent = this.getAuthErrorMessage(error.code);
+            errorMsg.style.display = 'block';
+        }
+    }
+
+    async handleSignUp(email, password) {
+        const errorMsg = document.getElementById('auth-error-msg');
+        errorMsg.style.display = 'none';
+
+        try {
+            const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+            // Create user document in Firestore
+            await firebase.firestore().collection('users').doc(userCredential.user.uid).set({
+                email: email,
+                createdAt: new Date(),
+                progress: {}
+            });
+            // Observer handles transition
+        } catch (error) {
+            console.error('Signup Error:', error);
+            errorMsg.textContent = this.getAuthErrorMessage(error.code);
+            errorMsg.style.display = 'block';
+        }
+    }
+
+    async handleLogout() {
+        try {
+            await firebase.auth().signOut();
+            window.location.reload(); // Reload to clear state cleanly
+        } catch (error) {
+            console.error('Logout Error:', error);
+        }
+    }
+
+    getAuthErrorMessage(code) {
+        switch (code) {
+            case 'auth/invalid-email': return 'Email inválido.';
+            case 'auth/user-disabled': return 'Este usuário foi desativado.';
+            case 'auth/user-not-found': return 'Usuário não encontrado. Crie uma conta.';
+            case 'auth/wrong-password': return 'Senha incorreta.';
+            case 'auth/email-already-in-use': return 'Este email já está cadastrado.';
+            case 'auth/weak-password': return 'A senha deve ter pelo menos 6 caracteres.';
+            default: return 'Erro ao autenticar. Tente novamente.';
+        }
+    }
 
         // Click outside to exit focus mode
         document.addEventListener('click', (e) => {
-            if (document.body.classList.contains('focus-mode-active')) {
-                const focusedCard = document.querySelector('.question-card.focused');
+    if (document.body.classList.contains('focus-mode-active')) {
+        const focusedCard = document.querySelector('.question-card.focused');
 
-                // If we clicked inside the FOCUSED card (or its children), ignore triggers to exit.
-                // This allows interaction with the active question.
-                if (focusedCard && focusedCard.contains(e.target)) {
-                    return;
-                }
+        // If we clicked inside the FOCUSED card (or its children), ignore triggers to exit.
+        // This allows interaction with the active question.
+        if (focusedCard && focusedCard.contains(e.target)) {
+            return;
+        }
 
-                // If we clicked anywhere else (dimmed background, dimmed card, or if no card is focused), exit focus mode.
-                this.exitFocusMode();
-            }
+        // If we clicked anywhere else (dimmed background, dimmed card, or if no card is focused), exit focus mode.
+        this.exitFocusMode();
+    }
+});
+    }
+
+updateFocusVisuals() {
+    const questions = document.querySelectorAll('.question-card');
+    document.body.classList.add('focus-mode-active');
+
+    questions.forEach((card, index) => {
+        if (index === this.currentFocusIndex) {
+            card.classList.add('focused');
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            card.classList.remove('focused');
+        }
+    });
+}
+
+exitFocusMode() {
+    document.body.classList.remove('focus-mode-active');
+    const questions = document.querySelectorAll('.question-card');
+    questions.forEach(card => card.classList.remove('focused'));
+    // Keep currentFocusIndex for next continuity or reset?
+    // Usually keeping it is better UX.
+}
+
+setupEventListeners() {
+    document.getElementById('apply-filters').addEventListener('click', () => this.applyFilters());
+    document.getElementById('clear-filters').addEventListener('click', () => this.clearFilters());
+
+    const itemsPerPageSelect = document.getElementById('items-per-page');
+    if (itemsPerPageSelect) {
+        itemsPerPageSelect.addEventListener('change', (e) => {
+            this.questionsPerPage = parseInt(e.target.value);
+            this.currentPage = 1;
+            this.renderQuestions();
         });
     }
 
-    updateFocusVisuals() {
-        const questions = document.querySelectorAll('.question-card');
-        document.body.classList.add('focus-mode-active');
+    const toggleFilters = document.getElementById('toggle-filters-btn');
+    if (toggleFilters) {
+        toggleFilters.addEventListener('click', () => {
+            const filtersBody = document.getElementById('filters-body');
+            const isHidden = filtersBody.style.display === 'none';
+            filtersBody.style.display = isHidden ? 'block' : 'none';
+            toggleFilters.textContent = isHidden ? '👁️ Ocultar' : '👁️ Mostrar';
+        });
+    }
 
-        questions.forEach((card, index) => {
-            if (index === this.currentFocusIndex) {
-                card.classList.add('focused');
-                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // --- AUTH EVENTS ---
+    const authForm = document.getElementById('auth-form');
+    if (authForm) {
+        authForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const pass = document.getElementById('auth-password').value;
+            const isSignUp = authForm.dataset.mode === 'signup';
+
+            if (isSignUp) {
+                this.handleSignUp(email, pass);
             } else {
-                card.classList.remove('focused');
+                this.handleLogin(email, pass);
             }
         });
     }
 
-    exitFocusMode() {
-        document.body.classList.remove('focus-mode-active');
-        const questions = document.querySelectorAll('.question-card');
-        questions.forEach(card => card.classList.remove('focused'));
-        // Keep currentFocusIndex for next continuity or reset?
-        // Usually keeping it is better UX.
+    const authToggle = document.getElementById('auth-toggle-link');
+    if (authToggle) {
+        authToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            const form = document.getElementById('auth-form');
+            const title = document.querySelector('.auth-header h2');
+            const subtitle = document.getElementById('auth-subtitle');
+            const btn = document.getElementById('btn-auth-submit');
+            const toggleText = document.getElementById('auth-toggle-text');
+
+            if (form.dataset.mode === 'signup') {
+                // Switch to Login
+                form.dataset.mode = 'login';
+                title.textContent = 'Bem-vindo ao CQ';
+                subtitle.textContent = 'Faça login para sincronizar seu progresso.';
+                btn.textContent = 'Entrar';
+                toggleText.innerHTML = 'Não tem conta? <a href="#" id="auth-toggle-link">Cadastre-se</a>';
+            } else {
+                // Switch to SignUp
+                form.dataset.mode = 'signup';
+                title.textContent = 'Criar Conta';
+                subtitle.textContent = 'Registre-se para salvar suas questões e estatísticas.';
+                btn.textContent = 'Cadastrar';
+                toggleText.innerHTML = 'Já tem conta? <a href="#" id="auth-toggle-link">Fazer Login</a>';
+            }
+
+            // Re-attach listener because innerHTML replacement kills it (quick fix logic, better to use delegation but this works for now if we don't replace the parent)
+            // Actually innerHTML replaces the link, so we need to target the parent or find the new link.
+            // Simple fix: changing only the text parts or getting the new element.
+            document.getElementById('auth-toggle-link').addEventListener('click', (ev) => authToggle.click()); // Recursive bind hack or just clean re-bind
+        });
+
+        // BETTER TOGGLE LOGIC to avoid event loss
+        authToggle.parentNode.addEventListener('click', (e) => {
+            if (e.target.id === 'auth-toggle-link') {
+                e.preventDefault();
+                const form = document.getElementById('auth-form');
+                const isSignup = form.dataset.mode === 'signup';
+
+                form.dataset.mode = isSignup ? 'login' : 'signup';
+                document.querySelector('.auth-header h2').textContent = isSignup ? 'Bem-vindo ao CQ' : 'Criar Conta';
+                document.getElementById('auth-subtitle').textContent = isSignup ? 'Faça login para sincronizar seu progresso.' : 'Registre-se para salvar suas questões e estatísticas.';
+                document.getElementById('btn-auth-submit').textContent = isSignup ? 'Entrar' : 'Cadastrar';
+
+                const spanText = isSignup ? 'Não tem conta? ' : 'Já tem conta? ';
+                const linkText = isSignup ? 'Cadastre-se' : 'Fazer Login';
+
+                e.target.parentNode.firstChild.textContent = spanText;
+                e.target.textContent = linkText;
+            }
+        });
     }
 
-    setupEventListeners() {
-        document.getElementById('apply-filters').addEventListener('click', () => this.applyFilters());
-        document.getElementById('clear-filters').addEventListener('click', () => this.clearFilters());
-
-        const itemsPerPageSelect = document.getElementById('items-per-page');
-        if (itemsPerPageSelect) {
-            itemsPerPageSelect.addEventListener('change', (e) => {
-                this.questionsPerPage = parseInt(e.target.value);
-                this.currentPage = 1;
-                this.renderQuestions();
-            });
+    // Add Logout Button logic (needs to be inserted in UI first, but here represents the handler)
+    // We will add a User Menu later.
+    toggleFilters.textContent = isHidden ? '👁️ Ocultar' : '🔍 Mostrar Filtros';
+});
         }
 
-        const toggleFilters = document.getElementById('toggle-filters-btn');
-        if (toggleFilters) {
-            toggleFilters.addEventListener('click', () => {
-                const filtersBody = document.getElementById('filters-body');
-                const isHidden = filtersBody.style.display === 'none';
-                filtersBody.style.display = isHidden ? 'block' : 'none';
-                toggleFilters.textContent = isHidden ? '👁️ Ocultar' : '🔍 Mostrar Filtros';
-            });
-        }
+document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
 
-        document.querySelectorAll('.nav-item').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.view-section').forEach(v => v.style.display = 'none');
 
-                const tab = btn.dataset.tab;
-                document.querySelectorAll('.view-section').forEach(v => v.style.display = 'none');
+        if (tab === 'questions') document.getElementById('questions-view').style.display = 'block';
+        else if (tab === 'performance') document.getElementById('performance-view').style.display = 'block';
+    });
+});
 
-                if (tab === 'questions') document.getElementById('questions-view').style.display = 'block';
-                else if (tab === 'performance') document.getElementById('performance-view').style.display = 'block';
-            });
-        });
+// NEW SORT EVENT LISTENERS
+document.getElementById('toggle-sort-options').addEventListener('click', () => {
+    const panel = document.getElementById('sort-options-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+});
 
-        // NEW SORT EVENT LISTENERS
-        document.getElementById('toggle-sort-options').addEventListener('click', () => {
-            const panel = document.getElementById('sort-options-panel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        });
+document.getElementById('sort-pedagogical').addEventListener('change', (e) => {
+    this.sortSettings.pedagogical = e.target.checked;
+    document.getElementById('pedagogical-suboptions').style.display = e.target.checked ? 'block' : 'none';
+    this.applyFilters();
+});
 
-        document.getElementById('sort-pedagogical').addEventListener('change', (e) => {
-            this.sortSettings.pedagogical = e.target.checked;
-            document.getElementById('pedagogical-suboptions').style.display = e.target.checked ? 'block' : 'none';
-            this.applyFilters();
-        });
+document.getElementById('sort-repeat').addEventListener('change', (e) => {
+    this.sortSettings.repeat = e.target.checked;
+    document.getElementById('priority-options').style.display = e.target.checked ? 'none' : 'block';
+    this.applyFilters();
+});
 
-        document.getElementById('sort-repeat').addEventListener('change', (e) => {
-            this.sortSettings.repeat = e.target.checked;
-            document.getElementById('priority-options').style.display = e.target.checked ? 'none' : 'block';
-            this.applyFilters();
-        });
+document.querySelectorAll('input[name="sort-priority"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        this.sortSettings.priority = e.target.value;
+        this.applyFilters();
+    });
+});
 
-        document.querySelectorAll('input[name="sort-priority"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                this.sortSettings.priority = e.target.value;
-                this.applyFilters();
-            });
-        });
+// EXPORT LISTENERS
+const btnExportMD = document.getElementById('btn-export-markdown');
+if (btnExportMD) btnExportMD.addEventListener('click', () => this.exportToMarkdown());
 
-        // EXPORT LISTENERS
-        const btnExportMD = document.getElementById('btn-export-markdown');
-        if (btnExportMD) btnExportMD.addEventListener('click', () => this.exportToMarkdown());
-
-        const btnExportDocx = document.getElementById('btn-export-docx');
-        if (btnExportDocx) btnExportDocx.addEventListener('click', () => this.exportToDocx());
+const btnExportDocx = document.getElementById('btn-export-docx');
+if (btnExportDocx) btnExportDocx.addEventListener('click', () => this.exportToDocx());
     }
 
-    showSuccess(msg) {
-        const toast = document.createElement('div');
-        toast.style.cssText = `position:fixed;top:20px;right:20px;background:var(--success);color:white;padding:12px 24px;border-radius:8px;z-index:9999;font-weight:600;`;
-        toast.textContent = msg;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-    }
+showSuccess(msg) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `position:fixed;top:20px;right:20px;background:var(--success);color:white;padding:12px 24px;border-radius:8px;z-index:9999;font-weight:600;`;
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
 
-    showError(msg) {
-        const toast = document.createElement('div');
-        toast.style.cssText = `position:fixed;top:20px;right:20px;background:var(--error);color:white;padding:12px 24px;border-radius:8px;z-index:9999;font-weight:600;`;
-        toast.textContent = msg;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-    }
+showError(msg) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `position:fixed;top:20px;right:20px;background:var(--error);color:white;padding:12px 24px;border-radius:8px;z-index:9999;font-weight:600;`;
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
 }
 
 window.addEventListener('load', () => {
