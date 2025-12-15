@@ -32,125 +32,60 @@ class QuestionBank {
     }
 
     // --- FIREBASE INTEGRATION ---
-    init() {
-        if (typeof firebase === 'undefined') {
-            console.error('Firebase SDK not loaded.');
-            document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;padding:20px;background:red;color:white;z-index:9999">ERRO CRÍTICO: Firebase não foi carregado. Verifique sua conexão ou adblocker.</div>';
-            return;
-        }
-
-        this.checkAuth();
+    async init() {
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
-        this.loadQuestionsFromJSON(); // Load database immediately
-    }
-
-    checkAuth() {
-        // Observer for Auth State
-        firebase.auth().onAuthStateChanged(user => {
-            if (user) {
-                this.currentUser = user;
-                console.log('User logged in:', user.email);
-                this.showAppView();
-                this.loadUserProgress(); // Load from Firestore
-            } else {
-                this.currentUser = null;
-                console.log('No user logged in.');
-                this.showAuthView();
-            }
-        });
-    }
-
-    showAuthView() {
-        document.getElementById('auth-view').style.display = 'block';
-        document.getElementById('questions-view').style.display = 'none';
-        document.getElementById('performance-view').style.display = 'none';
-
-        // Hide filters button/nav if needed, or just overlay
-        document.querySelector('.main-nav').style.display = 'none';
-    }
-
-    showAppView() {
-        document.getElementById('auth-view').style.display = 'none';
-        document.getElementById('questions-view').style.display = 'block';
-        document.querySelector('.main-nav').style.display = 'flex';
-
-        // Trigger initial render if data is ready
-        if (this.allQuestions.length > 0) {
-            this.applyFilters();
+        
+        // Load settings from localStorage
+        const savedSettings = localStorage.getItem('qc_sort_settings');
+        if (savedSettings) {
+            this.sortSettings = JSON.parse(savedSettings);
+            this.restoreSortUI();
         }
+
+        await this.loadQuestionsFromJSON();
+        this.loadUserProgress();
     }
 
-    async loadUserProgress() {
-        if (!this.currentUser) return;
-
-        try {
-            const docRef = firebase.firestore().collection('users').doc(this.currentUser.uid);
-            const doc = await docRef.get();
-
-            if (doc.exists) {
-                const data = doc.data();
-                this.userProgress = data.progress || {};
-                console.log('Progress loaded from Firestore.');
-
-                // Refresh View
-                if (this.allQuestions.length > 0) this.applyFilters();
-            } else {
-                console.log('No existing progress found for user.');
-                this.userProgress = {};
-            }
-        } catch (error) {
-            console.error('Error loading progress:', error);
-            this.showError('Erro ao carregar progresso da nuvem.');
-        }
+    saveUserProgress() {
+        const data = {
+            answeredQuestions: this.answeredQuestions,
+            userComments: this.userComments
+        };
+        localStorage.setItem('userProgress', JSON.stringify(data));
+        this.updateStats(); 
     }
 
-    async saveUserProgress() {
-        // Save locally for immediate feedback
-        localStorage.setItem('userProgress_v2', JSON.stringify(this.userProgress));
-
-        if (this.currentUser) {
-            // Debounce or just save directly (Firestore writes are cheap enough for this volume)
-            try {
-                await firebase.firestore().collection('users').doc(this.currentUser.uid).set({
-                    progress: this.userProgress,
-                    lastUpdated: new Date()
-                }, { merge: true });
-                console.log('Progress saved to Firestore.');
-            } catch (error) {
-                console.error('Error saving to Firestore:', error);
-            }
+    loadUserProgress() {
+        const saved = localStorage.getItem('userProgress');
+        if (saved) {
+            const data = JSON.parse(saved);
+            this.answeredQuestions = data.answeredQuestions || {};
+            this.userComments = data.userComments || {};
+            this.updateStats();
         }
     }
 
     async loadQuestionsFromJSON() {
         try {
-            // Taxonomia (com timeout para não travar)
-            if (window.taxonomyManager) {
-                const taxPromise = window.taxonomyManager.loadTaxonomy();
-                const timeoutPromise = new Promise(r => setTimeout(r, 2000)); // 2s timeout
-
-                await Promise.race([taxPromise, timeoutPromise]);
-                console.log('App: Tentativa de carga da taxonomia concluída.');
+             if (window.taxonomyManager) {
+                // Try load taxonomy securely
+                 try { await window.taxonomyManager.loadTaxonomy(); } catch(e) { console.warn('Taxonomia falhou', e); }
             }
 
-            // Retry mechanism for loading large DB
+            // Polling to wait for large DB file
             let retries = 0;
-            const maxRetries = 20; // 10s
+            const maxRetries = 20; 
 
             const waitForDB = () => {
                 return new Promise((resolve, reject) => {
                     const check = () => {
-                        // Debug visual (remover em prod, mas útil agora)
-                        const countEl = document.getElementById('questions-found-count');
-                        if (countEl && retries > 0) countEl.innerText = `(Carregando DB... ${retries})`;
-
                         if (window.OFFLINE_QUESTIONS && Array.isArray(window.OFFLINE_QUESTIONS)) {
                             resolve(window.OFFLINE_QUESTIONS);
                         } else {
                             retries++;
                             if (retries >= maxRetries) {
-                                reject(new Error('Timeout: questions_db.js não definiu window.OFFLINE_QUESTIONS'));
+                                reject(new Error('Timeout DB'));
                             } else {
                                 setTimeout(check, 500);
                             }
@@ -161,29 +96,19 @@ class QuestionBank {
             };
 
             const questions = await waitForDB();
-
             const uniqueQuestions = Array.from(new Map(questions.map(q => [q.id, q])).values());
-            console.log(`DB Carregado: ${uniqueQuestions.length} questões.`);
-
+            
             this.allQuestions = window.taxonomyManager.enrichQuestionsWithTaxonomy(uniqueQuestions);
-
-            // Critical check for filters reload
             this.processQuestions();
             this.populateFilters();
-
-            // If user is already on app view, apply filters now
-            if (document.getElementById('questions-view').style.display !== 'none') {
-                this.applyFilters();
-            }
-
+            this.applyFilters();
             this.showSuccess(`✅ ${this.allQuestions.length} questões carregadas.`);
 
         } catch (error) {
-            console.error('Erro fatal:', error);
-            this.showError('Erro ao carregar banco de dados (Verifique se o arquivo size > 40MB foi carregado).');
+            console.error('Erro ao carregar questoes:', error);
+            this.showError('Erro ao carregar banco de dados.');
         }
     }
-}
 
 processQuestions() {
     this.allQuestions.forEach(q => {
