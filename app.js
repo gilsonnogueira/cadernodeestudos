@@ -38,7 +38,7 @@ class QuestionBank {
             document.body.innerHTML += '<div style="position:fixed;top:0;left:0;width:100%;padding:20px;background:red;color:white;z-index:9999">ERRO CRÍTICO: Firebase não foi carregado. Verifique sua conexão ou adblocker.</div>';
             return;
         }
-        
+
         this.checkAuth();
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
@@ -129,7 +129,7 @@ class QuestionBank {
             if (window.taxonomyManager) {
                 const taxPromise = window.taxonomyManager.loadTaxonomy();
                 const timeoutPromise = new Promise(r => setTimeout(r, 2000)); // 2s timeout
-                
+
                 await Promise.race([taxPromise, timeoutPromise]);
                 console.log('App: Tentativa de carga da taxonomia concluída.');
             }
@@ -143,7 +143,7 @@ class QuestionBank {
                     const check = () => {
                         // Debug visual (remover em prod, mas útil agora)
                         const countEl = document.getElementById('questions-found-count');
-                        if(countEl && retries > 0) countEl.innerText = `(Carregando DB... ${retries})`;
+                        if (countEl && retries > 0) countEl.innerText = `(Carregando DB... ${retries})`;
 
                         if (window.OFFLINE_QUESTIONS && Array.isArray(window.OFFLINE_QUESTIONS)) {
                             resolve(window.OFFLINE_QUESTIONS);
@@ -161,21 +161,21 @@ class QuestionBank {
             };
 
             const questions = await waitForDB();
-            
+
             const uniqueQuestions = Array.from(new Map(questions.map(q => [q.id, q])).values());
             console.log(`DB Carregado: ${uniqueQuestions.length} questões.`);
 
             this.allQuestions = window.taxonomyManager.enrichQuestionsWithTaxonomy(uniqueQuestions);
-            
+
             // Critical check for filters reload
             this.processQuestions();
             this.populateFilters();
-            
+
             // If user is already on app view, apply filters now
             if (document.getElementById('questions-view').style.display !== 'none') {
                 this.applyFilters();
             }
-            
+
             this.showSuccess(`✅ ${this.allQuestions.length} questões carregadas.`);
 
         } catch (error) {
@@ -183,283 +183,279 @@ class QuestionBank {
             this.showError('Erro ao carregar banco de dados (Verifique se o arquivo size > 40MB foi carregado).');
         }
     }
-        } catch (error) {
-            console.error('Erro fatal:', error);
-            this.showError('Erro ao inicializar.');
-        }
-    }
+}
 
-    processQuestions() {
-        this.allQuestions.forEach(q => {
-            if (q.alternatives && q.alternatives.length === 2) {
-                const textA = q.alternatives[0].text.toLowerCase();
-                if (textA.includes('certo') || textA.includes('errado') || textA.includes('verdadeiro')) {
-                    q.type = 'certo-errado';
-                } else {
-                    q.type = 'multipla';
-                }
+processQuestions() {
+    this.allQuestions.forEach(q => {
+        if (q.alternatives && q.alternatives.length === 2) {
+            const textA = q.alternatives[0].text.toLowerCase();
+            if (textA.includes('certo') || textA.includes('errado') || textA.includes('verdadeiro')) {
+                q.type = 'certo-errado';
             } else {
                 q.type = 'multipla';
             }
+        } else {
+            q.type = 'multipla';
+        }
+    });
+}
+
+populateFilters() {
+    const getUniqueExcludingEmpty = (key) => {
+        const values = new Set(this.allQuestions.map(q => q[key]).filter(v => v));
+        return Array.from(values).sort();
+    };
+
+    const mapToOptions = (list) => list.map(item => ({ value: item, label: item, checked: false }));
+
+    const disciplines = getUniqueExcludingEmpty('discipline');
+    this.filters.discipline = new MultiSelect(
+        'discipline-filter',
+        'Selecione as disciplinas',
+        mapToOptions(disciplines),
+        () => { this.updateSubjectFilters(); this.applyFilters(); }
+    );
+
+    this.filters.subject = new MultiSelect('subject-filter', 'Selecione os assuntos', []);
+    this.updateSubjectFilters();
+
+    const bancas = getUniqueExcludingEmpty('banca');
+    this.filters.banca = new MultiSelect('banca-filter', 'Selecione as bancas', mapToOptions(bancas), () => this.applyFilters());
+
+    const years = new Set(this.allQuestions.map(q => q.year).filter(y => y));
+    const sortedYears = Array.from(years).sort((a, b) => b - a);
+    this.filters.year = new MultiSelect('year-filter', 'Selecione os anos', mapToOptions(sortedYears), () => this.applyFilters());
+
+    const modalidades = [
+        { value: 'multipla', label: 'Múltipla Escolha', checked: false },
+        { value: 'certo-errado', label: 'Certo/Errado', checked: false }
+    ];
+    this.filters.modalidade = new MultiSelect('modalidade-filter', 'Selecione a modalidade', modalidades, () => this.applyFilters());
+}
+
+updateSubjectFilters() {
+    const selectedDisciplines = this.filters.discipline ? this.filters.discipline.getSelectedValues() : [];
+    let options = [];
+
+    if (selectedDisciplines.length === 0) {
+        const subjectsSet = new Set();
+        this.allQuestions.forEach(q => {
+            if (q.subjects) q.subjects.forEach(s => subjectsSet.add(s));
         });
-    }
-
-    populateFilters() {
-        const getUniqueExcludingEmpty = (key) => {
-            const values = new Set(this.allQuestions.map(q => q[key]).filter(v => v));
-            return Array.from(values).sort();
-        };
-
-        const mapToOptions = (list) => list.map(item => ({ value: item, label: item, checked: false }));
-
-        const disciplines = getUniqueExcludingEmpty('discipline');
-        this.filters.discipline = new MultiSelect(
-            'discipline-filter',
-            'Selecione as disciplinas',
-            mapToOptions(disciplines),
-            () => { this.updateSubjectFilters(); this.applyFilters(); }
-        );
-
-        this.filters.subject = new MultiSelect('subject-filter', 'Selecione os assuntos', []);
-        this.updateSubjectFilters();
-
-        const bancas = getUniqueExcludingEmpty('banca');
-        this.filters.banca = new MultiSelect('banca-filter', 'Selecione as bancas', mapToOptions(bancas), () => this.applyFilters());
-
-        const years = new Set(this.allQuestions.map(q => q.year).filter(y => y));
-        const sortedYears = Array.from(years).sort((a, b) => b - a);
-        this.filters.year = new MultiSelect('year-filter', 'Selecione os anos', mapToOptions(sortedYears), () => this.applyFilters());
-
-        const modalidades = [
-            { value: 'multipla', label: 'Múltipla Escolha', checked: false },
-            { value: 'certo-errado', label: 'Certo/Errado', checked: false }
-        ];
-        this.filters.modalidade = new MultiSelect('modalidade-filter', 'Selecione a modalidade', modalidades, () => this.applyFilters());
-    }
-
-    updateSubjectFilters() {
-        const selectedDisciplines = this.filters.discipline ? this.filters.discipline.getSelectedValues() : [];
-        let options = [];
-
-        if (selectedDisciplines.length === 0) {
+        options = Array.from(subjectsSet).sort().map(s => ({ value: s, label: s, checked: false }));
+    } else {
+        if (window.taxonomyManager) {
+            selectedDisciplines.forEach(disc => {
+                const subjects = window.taxonomyManager.getSubjectsForDiscipline(disc);
+                subjects.forEach(s => {
+                    if (!options.some(o => o.value === s.value)) {
+                        options.push({ ...s, checked: false });
+                    }
+                });
+            });
+        } else {
             const subjectsSet = new Set();
-            this.allQuestions.forEach(q => {
+            this.allQuestions.filter(q => selectedDisciplines.includes(q.discipline)).forEach(q => {
                 if (q.subjects) q.subjects.forEach(s => subjectsSet.add(s));
             });
             options = Array.from(subjectsSet).sort().map(s => ({ value: s, label: s, checked: false }));
-        } else {
-            if (window.taxonomyManager) {
-                selectedDisciplines.forEach(disc => {
-                    const subjects = window.taxonomyManager.getSubjectsForDiscipline(disc);
-                    subjects.forEach(s => {
-                        if (!options.some(o => o.value === s.value)) {
-                            options.push({ ...s, checked: false });
-                        }
-                    });
-                });
-            } else {
-                const subjectsSet = new Set();
-                this.allQuestions.filter(q => selectedDisciplines.includes(q.discipline)).forEach(q => {
-                    if (q.subjects) q.subjects.forEach(s => subjectsSet.add(s));
-                });
-                options = Array.from(subjectsSet).sort().map(s => ({ value: s, label: s, checked: false }));
-            }
-        }
-
-        if (this.filters.subject) {
-            this.filters.subject.setOptions(options);
         }
     }
 
-    applyFilters() {
-        const selDisciplines = this.filters.discipline ? this.filters.discipline.getSelectedValues() : [];
-        const selSubjects = this.filters.subject ? this.filters.subject.getSelectedValues() : [];
-        const selBancas = this.filters.banca ? this.filters.banca.getSelectedValues() : [];
-        const selYears = this.filters.year ? this.filters.year.getSelectedValues() : [];
-        const selModalidades = this.filters.modalidade ? this.filters.modalidade.getSelectedValues() : [];
+    if (this.filters.subject) {
+        this.filters.subject.setOptions(options);
+    }
+}
 
-        const statusFilter = document.getElementById('status-filter').value;
-        const commentsFilter = document.getElementById('comments-filter').value;
-        const performanceFilter = document.getElementById('performance-filter').value;
+applyFilters() {
+    const selDisciplines = this.filters.discipline ? this.filters.discipline.getSelectedValues() : [];
+    const selSubjects = this.filters.subject ? this.filters.subject.getSelectedValues() : [];
+    const selBancas = this.filters.banca ? this.filters.banca.getSelectedValues() : [];
+    const selYears = this.filters.year ? this.filters.year.getSelectedValues() : [];
+    const selModalidades = this.filters.modalidade ? this.filters.modalidade.getSelectedValues() : [];
 
-        let filtered = this.allQuestions.filter(q => {
-            if (selDisciplines.length > 0 && !selDisciplines.includes(q.discipline)) return false;
+    const statusFilter = document.getElementById('status-filter').value;
+    const commentsFilter = document.getElementById('comments-filter').value;
+    const performanceFilter = document.getElementById('performance-filter').value;
 
-            if (selSubjects.length > 0) {
-                if (!q.subjects || q.subjects.length === 0) return false;
-                const matches = selSubjects.some(sel => {
-                    const cleanSel = sel.toLowerCase();
-                    return q.subjects.some(sub => sub.toLowerCase().includes(cleanSel) || cleanSel.includes(sub.toLowerCase()));
+    let filtered = this.allQuestions.filter(q => {
+        if (selDisciplines.length > 0 && !selDisciplines.includes(q.discipline)) return false;
+
+        if (selSubjects.length > 0) {
+            if (!q.subjects || q.subjects.length === 0) return false;
+            const matches = selSubjects.some(sel => {
+                const cleanSel = sel.toLowerCase();
+                return q.subjects.some(sub => sub.toLowerCase().includes(cleanSel) || cleanSel.includes(sub.toLowerCase()));
+            });
+            if (!matches) return false;
+        }
+
+        if (selBancas.length > 0 && !selBancas.includes(q.banca)) return false;
+        if (selYears.length > 0 && !selYears.includes(String(q.year))) return false;
+        if (selModalidades.length > 0) {
+            if (!selModalidades.includes(q.type)) return false;
+        }
+
+        const progress = this.userProgress[q.id] || {};
+
+        if (statusFilter === 'answered' && !progress.status) return false;
+        if (statusFilter === 'unanswered' && progress.status) return false;
+
+        const hasComment = progress.comments && progress.comments.trim().length > 0;
+        if (commentsFilter === 'commented' && !hasComment) return false;
+        if (commentsFilter === 'uncommented' && hasComment) return false;
+
+        if (performanceFilter === 'correct' && progress.status !== 'correct') return false;
+        if (performanceFilter === 'incorrect' && progress.status !== 'incorrect') return false;
+
+        return true;
+    });
+
+    // SORTING LOGIC
+    if (this.sortSettings.pedagogical) {
+        this.filteredQuestions = this.sortPedagogical(filtered);
+    } else {
+        // Default: Year Descending
+        this.filteredQuestions = filtered.sort((a, b) => (b.year || 0) - (a.year || 0));
+    }
+
+    this.currentQuestionIndex = 0;
+    this.currentPage = 1;
+    this.renderQuestions();
+    this.updateStats();
+}
+
+sortPedagogical(list) {
+    let result = [];
+    const MAX_INDEX = '9999';
+
+    list.forEach(q => {
+        const subjects = q.enrichedSubjects || [];
+
+        if (subjects.length === 0) {
+            result.push({ ...q, _sortIndex: MAX_INDEX });
+            return;
+        }
+
+        if (this.sortSettings.repeat) {
+            let added = false;
+            subjects.forEach(sub => {
+                const taxNode = (sub.taxonomy && sub.taxonomy.number) ? sub.taxonomy : null;
+                const sortIdx = taxNode ? taxNode.number : MAX_INDEX;
+
+                result.push({
+                    ...q,
+                    _sortIndex: sortIdx,
+                    _pedagogicalContext: sub.original,
+                    _sortTaxonomy: taxNode
                 });
-                if (!matches) return false;
+                added = true;
+            });
+            if (!added) result.push({ ...q, _sortIndex: MAX_INDEX });
+
+        } else {
+            let bestSortIdx = MAX_INDEX;
+            let bestTaxon = null;
+            const validSubjects = subjects.filter(s => s.taxonomy && s.taxonomy.number);
+
+            if (validSubjects.length > 0) {
+                validSubjects.sort((a, b) => a.taxonomy.number.localeCompare(b.taxonomy.number, undefined, { numeric: true }));
+
+                const bestSub = this.sortSettings.priority === 'min' ? validSubjects[0] : validSubjects[validSubjects.length - 1];
+                bestSortIdx = bestSub.taxonomy.number;
+                bestTaxon = bestSub.taxonomy;
             }
+            result.push({ ...q, _sortIndex: bestSortIdx, _sortTaxonomy: bestTaxon });
+        }
+    });
 
-            if (selBancas.length > 0 && !selBancas.includes(q.banca)) return false;
-            if (selYears.length > 0 && !selYears.includes(String(q.year))) return false;
-            if (selModalidades.length > 0) {
-                if (!selModalidades.includes(q.type)) return false;
-            }
+    result.sort((a, b) => {
+        const idxCompare = a._sortIndex.localeCompare(b._sortIndex, undefined, { numeric: true });
+        if (idxCompare !== 0) return idxCompare;
+        return (b.year || 0) - (a.year || 0);
+    });
 
-            const progress = this.userProgress[q.id] || {};
+    return result;
+}
 
-            if (statusFilter === 'answered' && !progress.status) return false;
-            if (statusFilter === 'unanswered' && progress.status) return false;
+exportToMarkdown() {
+    if (!this.filteredQuestions || this.filteredQuestions.length === 0) {
+        this.showError('Nenhuma questão para exportar.');
+        return;
+    }
 
-            const hasComment = progress.comments && progress.comments.trim().length > 0;
-            if (commentsFilter === 'commented' && !hasComment) return false;
-            if (commentsFilter === 'uncommented' && hasComment) return false;
+    let md = '';
+    let lastHeaderPath = '';
 
-            if (performanceFilter === 'correct' && progress.status !== 'correct') return false;
-            if (performanceFilter === 'incorrect' && progress.status !== 'incorrect') return false;
+    this.filteredQuestions.forEach((q, index) => {
+        let headerPrinted = false;
 
-            return true;
-        });
-
-        // SORTING LOGIC
+        // --- HEADER GENERATION ---
         if (this.sortSettings.pedagogical) {
-            this.filteredQuestions = this.sortPedagogical(filtered);
-        } else {
-            // Default: Year Descending
-            this.filteredQuestions = filtered.sort((a, b) => (b.year || 0) - (a.year || 0));
+            const currentTaxonomy = q._sortTaxonomy || null;
+            const currentDiscipline = q.discipline || 'Geral';
+            let currentPath = currentDiscipline;
+
+            if (currentTaxonomy) {
+                const taxPath = currentTaxonomy.fullPath || currentTaxonomy.name;
+                currentPath += ' > ' + taxPath;
+            }
+
+            if (currentPath !== lastHeaderPath) {
+                const parts = currentPath.split(' > ');
+                const lastParts = lastHeaderPath.split(' > ');
+
+                // Break before Header (only if not start of file)
+                if (md.length > 0) md += '\n[[Page-Break]]\n';
+
+                if (parts[0] !== lastParts[0] && parts[0]) md += `\n# ${parts[0]}\n`;
+                if (parts.length > 1 && (parts[1] !== lastParts[1] || parts[0] !== lastParts[0])) md += `\n## ${parts[1]}\n`;
+                if (parts.length > 2 && (parts[2] !== lastParts[2] || parts[1] !== lastParts[1])) md += `\n### ${parts[2]}\n`;
+
+                lastHeaderPath = currentPath;
+                md += '\n***\n';
+                headerPrinted = true;
+            }
         }
 
-        this.currentQuestionIndex = 0;
-        this.currentPage = 1;
-        this.renderQuestions();
-        this.updateStats();
-    }
-
-    sortPedagogical(list) {
-        let result = [];
-        const MAX_INDEX = '9999';
-
-        list.forEach(q => {
-            const subjects = q.enrichedSubjects || [];
-
-            if (subjects.length === 0) {
-                result.push({ ...q, _sortIndex: MAX_INDEX });
-                return;
-            }
-
-            if (this.sortSettings.repeat) {
-                let added = false;
-                subjects.forEach(sub => {
-                    const taxNode = (sub.taxonomy && sub.taxonomy.number) ? sub.taxonomy : null;
-                    const sortIdx = taxNode ? taxNode.number : MAX_INDEX;
-
-                    result.push({
-                        ...q,
-                        _sortIndex: sortIdx,
-                        _pedagogicalContext: sub.original,
-                        _sortTaxonomy: taxNode
-                    });
-                    added = true;
-                });
-                if (!added) result.push({ ...q, _sortIndex: MAX_INDEX });
-
-            } else {
-                let bestSortIdx = MAX_INDEX;
-                let bestTaxon = null;
-                const validSubjects = subjects.filter(s => s.taxonomy && s.taxonomy.number);
-
-                if (validSubjects.length > 0) {
-                    validSubjects.sort((a, b) => a.taxonomy.number.localeCompare(b.taxonomy.number, undefined, { numeric: true }));
-
-                    const bestSub = this.sortSettings.priority === 'min' ? validSubjects[0] : validSubjects[validSubjects.length - 1];
-                    bestSortIdx = bestSub.taxonomy.number;
-                    bestTaxon = bestSub.taxonomy;
-                }
-                result.push({ ...q, _sortIndex: bestSortIdx, _sortTaxonomy: bestTaxon });
-            }
-        });
-
-        result.sort((a, b) => {
-            const idxCompare = a._sortIndex.localeCompare(b._sortIndex, undefined, { numeric: true });
-            if (idxCompare !== 0) return idxCompare;
-            return (b.year || 0) - (a.year || 0);
-        });
-
-        return result;
-    }
-
-    exportToMarkdown() {
-        if (!this.filteredQuestions || this.filteredQuestions.length === 0) {
-            this.showError('Nenhuma questão para exportar.');
-            return;
-        }
-
-        let md = '';
-        let lastHeaderPath = '';
-
-        this.filteredQuestions.forEach((q, index) => {
-            let headerPrinted = false;
-
-            // --- HEADER GENERATION ---
-            if (this.sortSettings.pedagogical) {
-                const currentTaxonomy = q._sortTaxonomy || null;
-                const currentDiscipline = q.discipline || 'Geral';
-                let currentPath = currentDiscipline;
-
-                if (currentTaxonomy) {
-                    const taxPath = currentTaxonomy.fullPath || currentTaxonomy.name;
-                    currentPath += ' > ' + taxPath;
-                }
-
-                if (currentPath !== lastHeaderPath) {
-                    const parts = currentPath.split(' > ');
-                    const lastParts = lastHeaderPath.split(' > ');
-
-                    // Break before Header (only if not start of file)
-                    if (md.length > 0) md += '\n[[Page-Break]]\n';
-
-                    if (parts[0] !== lastParts[0] && parts[0]) md += `\n# ${parts[0]}\n`;
-                    if (parts.length > 1 && (parts[1] !== lastParts[1] || parts[0] !== lastParts[0])) md += `\n## ${parts[1]}\n`;
-                    if (parts.length > 2 && (parts[2] !== lastParts[2] || parts[1] !== lastParts[1])) md += `\n### ${parts[2]}\n`;
-
-                    lastHeaderPath = currentPath;
-                    md += '\n***\n';
-                    headerPrinted = true;
-                }
-            }
-
-            // --- QUESTION BODY ---
-            // If we just printed a header, don't break again (keep title with question)
-            // Otherwise, break to separate from previous answer
-            if (!headerPrinted) {
-                md += `\n[[Page-Break]]\n\n`;
-            } else {
-                md += `\n\n`; // Just spacing
-            }
-
-            const qUrl = q.question_url || ('https://www.qconcursos.com/questoes-de-concursos/questoes/' + q.id);
-            md += `#### Questão ${index + 1} ([${q.id}](${qUrl}))\n`;
-            md += `> ${q.banca} - ${q.year} - ${q.orgao || 'Não informado'}\n\n`;
-
-            let enunciated = this.cleanEnunciation(q.enunciation);
-            md += `${enunciated}\n\n`;
-
-            if (q.alternatives) {
-                q.alternatives.forEach(alt => {
-                    md += `**${alt.letter})** ${this.cleanEnunciation(alt.text)}\n\n`;
-                });
-            }
-
+        // --- QUESTION BODY ---
+        // If we just printed a header, don't break again (keep title with question)
+        // Otherwise, break to separate from previous answer
+        if (!headerPrinted) {
             md += `\n[[Page-Break]]\n\n`;
-            md += `**Gabarito: ${q.answer_key}**\n\n`;
-        });
-
-        this.downloadFile(md, `questoes_export_${new Date().toISOString().slice(0, 10)}.md`, 'text/markdown');
-        this.showSuccess(`Arquivo Markdown gerado com ${this.filteredQuestions.length} questões!`);
-    }
-
-    exportToDocx() {
-        if (!this.filteredQuestions || this.filteredQuestions.length === 0) {
-            this.showError('Nenhuma questão para exportar.');
-            return;
+        } else {
+            md += `\n\n`; // Just spacing
         }
 
-        // Microsoft Word 365 compatible HTML wrapper
-        let html = `
+        const qUrl = q.question_url || ('https://www.qconcursos.com/questoes-de-concursos/questoes/' + q.id);
+        md += `#### Questão ${index + 1} ([${q.id}](${qUrl}))\n`;
+        md += `> ${q.banca} - ${q.year} - ${q.orgao || 'Não informado'}\n\n`;
+
+        let enunciated = this.cleanEnunciation(q.enunciation);
+        md += `${enunciated}\n\n`;
+
+        if (q.alternatives) {
+            q.alternatives.forEach(alt => {
+                md += `**${alt.letter})** ${this.cleanEnunciation(alt.text)}\n\n`;
+            });
+        }
+
+        md += `\n[[Page-Break]]\n\n`;
+        md += `**Gabarito: ${q.answer_key}**\n\n`;
+    });
+
+    this.downloadFile(md, `questoes_export_${new Date().toISOString().slice(0, 10)}.md`, 'text/markdown');
+    this.showSuccess(`Arquivo Markdown gerado com ${this.filteredQuestions.length} questões!`);
+}
+
+exportToDocx() {
+    if (!this.filteredQuestions || this.filteredQuestions.length === 0) {
+        this.showError('Nenhuma questão para exportar.');
+        return;
+    }
+
+    // Microsoft Word 365 compatible HTML wrapper
+    let html = `
         <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
         <head>
             <meta charset="utf-8">
@@ -519,69 +515,69 @@ class QuestionBank {
         <div class="Section1">
         `;
 
-        let lastHeaderPath = '';
+    let lastHeaderPath = '';
 
-        this.filteredQuestions.forEach((q, index) => {
-            let headerPrinted = false;
+    this.filteredQuestions.forEach((q, index) => {
+        let headerPrinted = false;
 
-            // Headers Logic
-            if (this.sortSettings.pedagogical) {
-                const currentTaxonomy = q._sortTaxonomy || null;
-                const currentDiscipline = q.discipline || 'Geral';
-                let currentPath = currentDiscipline;
+        // Headers Logic
+        if (this.sortSettings.pedagogical) {
+            const currentTaxonomy = q._sortTaxonomy || null;
+            const currentDiscipline = q.discipline || 'Geral';
+            let currentPath = currentDiscipline;
 
-                if (currentTaxonomy) {
-                    const taxPath = currentTaxonomy.fullPath || currentTaxonomy.name;
-                    currentPath += ' > ' + taxPath;
-                }
-
-                if (currentPath !== lastHeaderPath) {
-                    const parts = currentPath.split(' > ');
-                    const lastParts = lastHeaderPath.split(' > ');
-
-                    // Page break for new major sections if not at start
-                    if (html.length > 2000) html += '<br style="page-break-before:always" />';
-
-                    html += '<div class="header-block">';
-                    if (parts[0] !== lastParts[0] && parts[0]) html += `<h1>${parts[0]}</h1>`;
-                    if (parts.length > 1 && (parts[1] !== lastParts[1] || parts[0] !== lastParts[0])) html += `<h2>${parts[1]}</h2>`;
-                    if (parts.length > 2 && (parts[2] !== lastParts[2] || parts[1] !== lastParts[1])) html += `<h3>${parts[2]}</h3>`;
-                    html += '</div>';
-
-                    lastHeaderPath = currentPath;
-                    headerPrinted = true;
-                }
+            if (currentTaxonomy) {
+                const taxPath = currentTaxonomy.fullPath || currentTaxonomy.name;
+                currentPath += ' > ' + taxPath;
             }
 
-            // Page Break before Question (if not section start)
-            if (!headerPrinted && index > 0) {
-                html += `<br style="page-break-before:always" />`;
+            if (currentPath !== lastHeaderPath) {
+                const parts = currentPath.split(' > ');
+                const lastParts = lastHeaderPath.split(' > ');
+
+                // Page break for new major sections if not at start
+                if (html.length > 2000) html += '<br style="page-break-before:always" />';
+
+                html += '<div class="header-block">';
+                if (parts[0] !== lastParts[0] && parts[0]) html += `<h1>${parts[0]}</h1>`;
+                if (parts.length > 1 && (parts[1] !== lastParts[1] || parts[0] !== lastParts[0])) html += `<h2>${parts[1]}</h2>`;
+                if (parts.length > 2 && (parts[2] !== lastParts[2] || parts[1] !== lastParts[1])) html += `<h3>${parts[2]}</h3>`;
+                html += '</div>';
+
+                lastHeaderPath = currentPath;
+                headerPrinted = true;
             }
+        }
 
-            const qUrl = q.question_url || ('https://www.qconcursos.com/questoes-de-concursos/questoes/' + q.id);
-            html += `<div class="question-block">`;
-            html += `<div class="q-header">Questão ${index + 1} (<a href="${qUrl}">${q.id}</a>)</div>`;
-            html += `<p><i>${q.banca} - ${q.year} - ${q.orgao || 'Não informado'}</i></p>`;
-
-            let htmlEn = this.markdownToHtml(this.cleanEnunciation(q.enunciation));
-            html += `<div class="enunciation">${htmlEn}</div>`;
-
-            if (q.alternatives) {
-                html += `<div class="alternatives">`;
-                q.alternatives.forEach(alt => {
-                    let htmlAlt = this.markdownToHtml(this.cleanEnunciation(alt.text));
-                    html += `<div class="alt-item"><b>${alt.letter})</b> ${htmlAlt}</div>`;
-                });
-                html += `</div>`;
-            }
-
-            // Gabarito Centered
+        // Page Break before Question (if not section start)
+        if (!headerPrinted && index > 0) {
             html += `<br style="page-break-before:always" />`;
-            html += `<div class="gabarito">Gabarito: ${q.answer_key}</div>`;
-            html += `</div>`;
-        });
+        }
 
-        html += `
+        const qUrl = q.question_url || ('https://www.qconcursos.com/questoes-de-concursos/questoes/' + q.id);
+        html += `<div class="question-block">`;
+        html += `<div class="q-header">Questão ${index + 1} (<a href="${qUrl}">${q.id}</a>)</div>`;
+        html += `<p><i>${q.banca} - ${q.year} - ${q.orgao || 'Não informado'}</i></p>`;
+
+        let htmlEn = this.markdownToHtml(this.cleanEnunciation(q.enunciation));
+        html += `<div class="enunciation">${htmlEn}</div>`;
+
+        if (q.alternatives) {
+            html += `<div class="alternatives">`;
+            q.alternatives.forEach(alt => {
+                let htmlAlt = this.markdownToHtml(this.cleanEnunciation(alt.text));
+                html += `<div class="alt-item"><b>${alt.letter})</b> ${htmlAlt}</div>`;
+            });
+            html += `</div>`;
+        }
+
+        // Gabarito Centered
+        html += `<br style="page-break-before:always" />`;
+        html += `<div class="gabarito">Gabarito: ${q.answer_key}</div>`;
+        html += `</div>`;
+    });
+
+    html += `
         </div> <!-- End Section1 -->
         
         <!-- FOOTER DEFINITION FOR WORD -->
@@ -603,168 +599,168 @@ class QuestionBank {
         </body>
         </html>`;
 
-        // CHANGED TO .DOC for compatibility. plain HTML in .docx is invalid.
-        this.downloadFile(html, `questoes_export_${new Date().toISOString().slice(0, 10)}.doc`, 'application/msword');
-        this.showSuccess(`Arquivo DOCX (HTML Compatível) gerado!`);
-    }
+    // CHANGED TO .DOC for compatibility. plain HTML in .docx is invalid.
+    this.downloadFile(html, `questoes_export_${new Date().toISOString().slice(0, 10)}.doc`, 'application/msword');
+    this.showSuccess(`Arquivo DOCX (HTML Compatível) gerado!`);
+}
 
-    markdownToHtml(text) {
-        if (!text) return '';
-        let t = text;
-        t = t.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-        t = t.replace(/\*(.*?)\*/g, '<i>$1</i>');
-        t = t.replace(/\n/g, '<br>');
-        return t;
-    }
+markdownToHtml(text) {
+    if (!text) return '';
+    let t = text;
+    t = t.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+    t = t.replace(/\*(.*?)\*/g, '<i>$1</i>');
+    t = t.replace(/\n/g, '<br>');
+    return t;
+}
 
-    cleanEnunciation(text) {
-        if (!text) return '';
-        return text;
-    }
+cleanEnunciation(text) {
+    if (!text) return '';
+    return text;
+}
 
-    downloadFile(content, fileName, mimeType = 'text/markdown') {
-        const blob = new Blob([content], { type: mimeType });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-    }
+downloadFile(content, fileName, mimeType = 'text/markdown') {
+    const blob = new Blob([content], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
 
-    clearFilters() {
-        if (this.filters.discipline) this.filters.discipline.clearSelection();
-        if (this.filters.subject) this.filters.subject.clearSelection();
-        if (this.filters.banca) this.filters.banca.clearSelection();
-        if (this.filters.year) this.filters.year.clearSelection();
-        if (this.filters.modalidade) this.filters.modalidade.clearSelection();
+clearFilters() {
+    if (this.filters.discipline) this.filters.discipline.clearSelection();
+    if (this.filters.subject) this.filters.subject.clearSelection();
+    if (this.filters.banca) this.filters.banca.clearSelection();
+    if (this.filters.year) this.filters.year.clearSelection();
+    if (this.filters.modalidade) this.filters.modalidade.clearSelection();
 
-        document.getElementById('status-filter').value = 'all';
-        document.getElementById('comments-filter').value = 'all';
-        document.getElementById('performance-filter').value = 'all';
+    document.getElementById('status-filter').value = 'all';
+    document.getElementById('comments-filter').value = 'all';
+    document.getElementById('performance-filter').value = 'all';
 
-        this.applyFilters();
-    }
+    this.applyFilters();
+}
 
-    renderQuestions() {
-        const container = document.getElementById('questions-list');
-        const start = (this.currentPage - 1) * this.questionsPerPage;
-        const end = start + this.questionsPerPage;
-        const list = this.filteredQuestions.slice(start, end);
+renderQuestions() {
+    const container = document.getElementById('questions-list');
+    const start = (this.currentPage - 1) * this.questionsPerPage;
+    const end = start + this.questionsPerPage;
+    const list = this.filteredQuestions.slice(start, end);
 
-        const countBadge = document.getElementById('questions-found-count');
-        if (countBadge) countBadge.textContent = `(${this.filteredQuestions.length})`;
+    const countBadge = document.getElementById('questions-found-count');
+    if (countBadge) countBadge.textContent = `(${this.filteredQuestions.length})`;
 
-        if (list.length === 0) {
-            container.innerHTML = `
+    if (list.length === 0) {
+        container.innerHTML = `
                 <div style="padding: 40px; text-align: center; color: var(--text-secondary);">
                     <h3>Nenhuma questão encontrada</h3>
                     <p>Tente ajustar seus filtros de busca.</p>
                 </div>`;
-            this.updatePagination(0);
-            return;
-        }
+        this.updatePagination(0);
+        return;
+    }
 
-        container.innerHTML = list.map(q => this.createQuestionCardHTML(q)).join('');
+    container.innerHTML = list.map(q => this.createQuestionCardHTML(q)).join('');
 
-        this.attachCardEvents(container, list);
-        this.updatePagination(Math.ceil(this.filteredQuestions.length / this.questionsPerPage));
+    this.attachCardEvents(container, list);
+    this.updatePagination(Math.ceil(this.filteredQuestions.length / this.questionsPerPage));
 
-        // CRITICAL FIX: Restore focus visuals if we are in focus mode
-        // When the DOM is rebuilt, the 'focused' class is lost, but the body class persists.
-        if (document.body.classList.contains('focus-mode-active')) {
-            if (this.currentFocusIndex >= 0 && this.currentFocusIndex < list.length) {
-                const cards = container.querySelectorAll('.question-card');
-                if (cards[this.currentFocusIndex]) {
-                    cards[this.currentFocusIndex].classList.add('focused');
-                    // Ensure it stays visible
-                    // cards[this.currentFocusIndex].scrollIntoView({ behavior: 'auto', block: 'center' });
-                }
-            } else {
-                // If index is somehow invalid, just exit focus mode to avoid "gray screen" trap
-                this.exitFocusMode();
+    // CRITICAL FIX: Restore focus visuals if we are in focus mode
+    // When the DOM is rebuilt, the 'focused' class is lost, but the body class persists.
+    if (document.body.classList.contains('focus-mode-active')) {
+        if (this.currentFocusIndex >= 0 && this.currentFocusIndex < list.length) {
+            const cards = container.querySelectorAll('.question-card');
+            if (cards[this.currentFocusIndex]) {
+                cards[this.currentFocusIndex].classList.add('focused');
+                // Ensure it stays visible
+                // cards[this.currentFocusIndex].scrollIntoView({ behavior: 'auto', block: 'center' });
             }
+        } else {
+            // If index is somehow invalid, just exit focus mode to avoid "gray screen" trap
+            this.exitFocusMode();
         }
     }
+}
 
-    extractCargo(q) {
-        if (!q.prova) return '';
+extractCargo(q) {
+    if (!q.prova) return '';
 
-        let text = q.prova;
+    let text = q.prova;
 
-        // Remove known components to isolate the Cargo
-        if (q.banca) text = text.replace(q.banca, '');
-        if (q.year) text = text.replace(String(q.year), '');
-        if (q.orgao) text = text.replace(q.orgao, '');
+    // Remove known components to isolate the Cargo
+    if (q.banca) text = text.replace(q.banca, '');
+    if (q.year) text = text.replace(String(q.year), '');
+    if (q.orgao) text = text.replace(q.orgao, '');
 
-        // Cleanup separators
-        return text.replace(/^[ \-–]+|[ \-–]+$/g, '').trim();
+    // Cleanup separators
+    return text.replace(/^[ \-–]+|[ \-–]+$/g, '').trim();
+}
+
+createQuestionCardHTML(q) {
+    const progress = this.userProgress[q.id] || {};
+    const isAnswered = !!progress.status;
+    const hasComment = progress.comments && progress.comments.trim().length > 0;
+
+    // CHIPS ROW (Banca, Year, Orgao, Pedagogical)
+    let visualBadges = '';
+
+    // Pedagogical Context first if exists (it's important)
+    if (q._pedagogicalContext) {
+        visualBadges += `<span class="badge" style="background:var(--primary-light); color:var(--primary); border:1px solid var(--primary);">📂 ${q._pedagogicalContext}</span>`;
     }
 
-    createQuestionCardHTML(q) {
-        const progress = this.userProgress[q.id] || {};
-        const isAnswered = !!progress.status;
-        const hasComment = progress.comments && progress.comments.trim().length > 0;
-
-        // CHIPS ROW (Banca, Year, Orgao, Pedagogical)
-        let visualBadges = '';
-
-        // Pedagogical Context first if exists (it's important)
-        if (q._pedagogicalContext) {
-            visualBadges += `<span class="badge" style="background:var(--primary-light); color:var(--primary); border:1px solid var(--primary);">📂 ${q._pedagogicalContext}</span>`;
-        }
-
-        visualBadges += `
+    visualBadges += `
             <span class="badge badge-banca">${q.banca}</span>
             <span class="badge badge-year">${q.year}</span>
         `;
 
-        if (q.orgao) {
-            visualBadges += `<span class="badge badge-orgao">${q.orgao}</span>`;
+    if (q.orgao) {
+        visualBadges += `<span class="badge badge-orgao">${q.orgao}</span>`;
+    }
+
+    // CARGO (Separate logic)
+    const cargo = this.extractCargo(q);
+    let cargoHTML = '';
+    if (cargo && cargo.length > 2) {
+        cargoHTML = `<div class="q-cargo-row">💼 <span class="cargo-text">${cargo}</span></div>`;
+    }
+
+    // STATUS BADGE (Right aligned)
+    let statusBadge = '';
+    if (hasComment) statusBadge += `<span class="badge badge-status commented">💬 Comentada</span>`;
+
+    if (!isAnswered) {
+        statusBadge += `<span class="badge badge-status unanswered">⚪ Não Respondida</span>`;
+    } else {
+        if (progress.status === 'correct') statusBadge += `<span class="badge badge-status answered">✅ Acertou</span>`;
+        else statusBadge += `<span class="badge badge-status unanswered" style="background:var(--error-light);color:var(--error);border-color:var(--error-light);">❌ Errou</span>`;
+    }
+
+    const alternativesHTML = q.alternatives.map(alt => {
+        let itemClass = 'alternative-item';
+        let feedbackClass = '';
+
+        if (isAnswered) {
+            if (alt.letter === q.answer_key) feedbackClass = 'alt-correct';
+            if (alt.letter === progress.userAnswer && progress.status === 'incorrect') feedbackClass = 'alt-incorrect';
         }
 
-        // CARGO (Separate logic)
-        const cargo = this.extractCargo(q);
-        let cargoHTML = '';
-        if (cargo && cargo.length > 2) {
-            cargoHTML = `<div class="q-cargo-row">💼 <span class="cargo-text">${cargo}</span></div>`;
-        }
+        const isSelected = progress.userAnswer === alt.letter;
+        if (isSelected) itemClass += ' selected';
 
-        // STATUS BADGE (Right aligned)
-        let statusBadge = '';
-        if (hasComment) statusBadge += `<span class="badge badge-status commented">💬 Comentada</span>`;
-
-        if (!isAnswered) {
-            statusBadge += `<span class="badge badge-status unanswered">⚪ Não Respondida</span>`;
-        } else {
-            if (progress.status === 'correct') statusBadge += `<span class="badge badge-status answered">✅ Acertou</span>`;
-            else statusBadge += `<span class="badge badge-status unanswered" style="background:var(--error-light);color:var(--error);border-color:var(--error-light);">❌ Errou</span>`;
-        }
-
-        const alternativesHTML = q.alternatives.map(alt => {
-            let itemClass = 'alternative-item';
-            let feedbackClass = '';
-
-            if (isAnswered) {
-                if (alt.letter === q.answer_key) feedbackClass = 'alt-correct';
-                if (alt.letter === progress.userAnswer && progress.status === 'incorrect') feedbackClass = 'alt-incorrect';
-            }
-
-            const isSelected = progress.userAnswer === alt.letter;
-            if (isSelected) itemClass += ' selected';
-
-            return `
+        return `
                 <div class="${itemClass} ${feedbackClass}" data-letter="${alt.letter}">
                     <div class="alt-letter">${alt.letter}</div>
                     <div class="alt-text">${alt.text}</div>
                     <button class="btn-eliminate" title="Tachar alternativa">✂️</button>
                 </div>
             `;
-        }).join('');
+    }).join('');
 
-        const commentsHTML = `
+    const commentsHTML = `
             <div class="q-comments-area ${hasComment ? 'active' : ''}" id="comments-${q.id}">
                 <div class="user-comment-box" id="editor-container-${q.id}">
                     <div class="editor-toolbar">
@@ -792,7 +788,7 @@ class QuestionBank {
             </div>
         `;
 
-        return `
+    return `
             <div class="question-card" data-id="${q.id}">
                 <div class="q-header">
                     <div class="q-top-row">
@@ -828,382 +824,382 @@ class QuestionBank {
                 ${commentsHTML}
             </div>
         `;
+}
+
+attachCardEvents(container, questions) {
+    questions.forEach(q => {
+        const card = container.querySelector(`.question-card[data-id="${q.id}"]`);
+        if (!card) return;
+
+        const alts = card.querySelectorAll('.alternative-item');
+        const respondBtn = card.querySelector('.btn-respond');
+
+        alts.forEach(alt => {
+            alt.addEventListener('click', (e) => {
+                // Ignore clicks on eliminate button (handled separately)
+                if (e.target.closest('.btn-eliminate')) return;
+
+                const progress = this.userProgress[q.id];
+                if (progress && progress.status) return;
+
+                alts.forEach(a => a.classList.remove('selected'));
+                alt.classList.add('selected');
+                if (respondBtn) respondBtn.disabled = false;
+            });
+
+            const eliminateBtn = alt.querySelector('.btn-eliminate');
+            if (eliminateBtn) {
+                eliminateBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    alt.classList.toggle('eliminated');
+                });
+            }
+        });
+
+        if (respondBtn) {
+            respondBtn.addEventListener('click', () => {
+                const selected = card.querySelector('.alternative-item.selected');
+                if (selected) {
+                    this.handleAnswer(q, selected.dataset.letter);
+                }
+            });
+        }
+
+        const toggleComment = card.querySelector('.btn-toggle-comments');
+        const commentArea = card.querySelector('.q-comments-area');
+        toggleComment.addEventListener('click', () => {
+            const isActive = commentArea.classList.toggle('active');
+            if (isActive && !card.dataset.editorInit && window.MarkdownEditor) {
+                new MarkdownEditor(`editor-container-${q.id}`);
+                card.dataset.editorInit = 'true';
+            }
+        });
+
+        const saveBtn = card.querySelector('.btn-save-comment');
+        const textarea = card.querySelector('textarea');
+        saveBtn.addEventListener('click', () => {
+            this.saveComment(q.id, textarea.value);
+        });
+    });
+}
+
+handleAnswer(question, answerLetter) {
+    const isCorrect = answerLetter === question.answer_key;
+    if (!this.userProgress[question.id]) this.userProgress[question.id] = {};
+    this.userProgress[question.id].status = isCorrect ? 'correct' : 'incorrect';
+    this.userProgress[question.id].userAnswer = answerLetter;
+    this.userProgress[question.id].answeredAt = new Date().toISOString();
+    this.saveUserProgress();
+    this.renderQuestions();
+
+    // Animations
+    if (isCorrect) {
+        this.triggerConfetti();
+    } else {
+        this.triggerShake(question.id);
+    }
+}
+
+triggerConfetti() {
+    const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
+
+    for (let i = 0; i < 100; i++) {
+        const confetti = document.createElement('div');
+        confetti.classList.add('confetti');
+        document.body.appendChild(confetti);
+
+        const left = Math.random() * 100 + 'vw';
+        const animDuration = Math.random() * 3 + 2 + 's';
+        const bg = colors[Math.floor(Math.random() * colors.length)];
+
+        confetti.style.left = left;
+        confetti.style.backgroundColor = bg;
+        confetti.style.animationDuration = animDuration;
+
+        // Cleanup
+        setTimeout(() => confetti.remove(), 5000);
+    }
+}
+
+triggerShake(qId) {
+    const card = document.querySelector(`.question-card[data-id="${qId}"]`);
+    if (card) {
+        card.classList.add('shake-animation');
+        card.addEventListener('animationend', () => {
+            card.classList.remove('shake-animation');
+        }, { once: true });
+    }
+}
+
+saveComment(qId, text) {
+    if (!this.userProgress[qId]) this.userProgress[qId] = {};
+    this.userProgress[qId].comments = text;
+    this.saveUserProgress();
+    this.showSuccess('Comentário salvo');
+    this.renderQuestions();
+}
+
+updatePagination(totalPages) {
+    const container = document.getElementById('page-numbers');
+    container.innerHTML = '';
+
+    const createPageBtn = (page, isActive = false) => {
+        const btn = document.createElement('div');
+        btn.className = `page-number ${isActive ? 'active' : ''}`;
+        btn.textContent = page;
+        btn.onclick = () => {
+            if (this.currentPage !== page) {
+                this.currentPage = page;
+                this.changePage();
+            }
+        };
+        return btn;
+    };
+
+    const createDots = () => {
+        const span = document.createElement('span');
+        span.className = 'page-dots';
+        span.textContent = '...';
+        return span;
+    };
+
+    // Smart Pagination Logic
+    if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) {
+            container.appendChild(createPageBtn(i, i === this.currentPage));
+        }
+    } else {
+        // Always show first
+        container.appendChild(createPageBtn(1, 1 === this.currentPage));
+
+        if (this.currentPage > 3) {
+            container.appendChild(createDots());
+        }
+
+        // Neighbors
+        let start = Math.max(2, this.currentPage - 1);
+        let end = Math.min(totalPages - 1, this.currentPage + 1);
+
+        // Adjust if near start or end to keep constant number of items approximately
+        if (this.currentPage <= 3) {
+            end = 4;
+        }
+        if (this.currentPage >= totalPages - 2) {
+            start = totalPages - 3;
+        }
+
+        for (let i = start; i <= end; i++) {
+            container.appendChild(createPageBtn(i, i === this.currentPage));
+        }
+
+        if (this.currentPage < totalPages - 2) {
+            container.appendChild(createDots());
+        }
+
+        // Always show last
+        container.appendChild(createPageBtn(totalPages, totalPages === this.currentPage));
     }
 
-    attachCardEvents(container, questions) {
-        questions.forEach(q => {
-            const card = container.querySelector(`.question-card[data-id="${q.id}"]`);
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+
+    // Update Button States and Content
+    if (prevBtn) {
+        prevBtn.disabled = this.currentPage === 1;
+        prevBtn.innerHTML = '‹ Anterior'; // Using chevron
+        prevBtn.onclick = () => {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+                this.changePage();
+            }
+        };
+    }
+
+    if (nextBtn) {
+        nextBtn.disabled = this.currentPage === totalPages;
+        nextBtn.innerHTML = 'Próxima ›';
+        nextBtn.onclick = () => {
+            if (this.currentPage < totalPages) {
+                this.currentPage++;
+                this.changePage();
+            }
+        };
+    }
+}
+
+changePage() {
+    this.currentFocusIndex = -1;
+    if (document.body.classList.contains('focus-mode-active')) this.exitFocusMode();
+    this.renderQuestions();
+    window.scrollTo(0, 0);
+}
+
+updateStats() {
+    const total = this.allQuestions.length;
+    const answered = Object.values(this.userProgress).filter(p => p.status).length;
+    const correct = Object.values(this.userProgress).filter(p => p.status === 'correct').length;
+    const rate = answered ? Math.round((correct / answered) * 100) : 0;
+
+    const elTotal = document.getElementById('total-questions-stats');
+    if (elTotal) elTotal.textContent = total;
+    const elAns = document.getElementById('total-answered-stats');
+    if (elAns) elAns.textContent = answered;
+    const elRate = document.getElementById('success-rate-stats');
+    if (elRate) elRate.textContent = `${rate}%`;
+}
+
+setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Ignore key events if typing in an input or textarea
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        // PAGE NAVIGATION (Ctrl + Shift + Arrows)
+        if (e.ctrlKey && e.shiftKey) {
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (this.currentPage < Math.ceil(this.filteredQuestions.length / this.questionsPerPage)) {
+                    this.currentFocusIndex = -1; // Reset focus
+                    if (document.body.classList.contains('focus-mode-active')) this.exitFocusMode();
+                    document.getElementById('next-page').click();
+                }
+                return;
+            }
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (this.currentPage > 1) {
+                    this.currentFocusIndex = -1; // Reset focus
+                    if (document.body.classList.contains('focus-mode-active')) this.exitFocusMode();
+                    document.getElementById('prev-page').click();
+                }
+                return;
+            }
+        }
+
+        // QUESTION NAVIGATION (Ctrl + Arrows)
+        if (e.ctrlKey && !e.shiftKey) {
+            const questions = document.querySelectorAll('.question-card');
+            if (questions.length === 0) return;
+
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (this.currentFocusIndex < questions.length - 1) {
+                    this.currentFocusIndex++;
+                    this.updateFocusVisuals();
+                }
+                return;
+            }
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (this.currentFocusIndex > 0) {
+                    this.currentFocusIndex--;
+                    this.updateFocusVisuals();
+                } else if (this.currentFocusIndex === -1) {
+                    this.currentFocusIndex = 0;
+                    this.updateFocusVisuals();
+                }
+                return;
+            }
+        }
+
+        // ALTERNATIVE ACTIONS (A-E)
+        const key = e.key.toUpperCase();
+        if (['A', 'B', 'C', 'D', 'E'].includes(key)) {
+            if (this.currentFocusIndex === -1) return; // Only when a question is focused
+
+            const questions = document.querySelectorAll('.question-card');
+            const card = questions[this.currentFocusIndex];
             if (!card) return;
 
-            const alts = card.querySelectorAll('.alternative-item');
-            const respondBtn = card.querySelector('.btn-respond');
+            const alt = card.querySelector(`.alternative-item[data-letter="${key}"]`);
+            if (!alt) return;
 
-            alts.forEach(alt => {
-                alt.addEventListener('click', (e) => {
-                    // Ignore clicks on eliminate button (handled separately)
-                    if (e.target.closest('.btn-eliminate')) return;
-
-                    const progress = this.userProgress[q.id];
-                    if (progress && progress.status) return;
-
-                    alts.forEach(a => a.classList.remove('selected'));
-                    alt.classList.add('selected');
-                    if (respondBtn) respondBtn.disabled = false;
-                });
-
+            if (e.shiftKey) {
+                // ELIMINATE (Shift + Letter)
                 const eliminateBtn = alt.querySelector('.btn-eliminate');
-                if (eliminateBtn) {
-                    eliminateBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        alt.classList.toggle('eliminated');
-                    });
-                }
-            });
-
-            if (respondBtn) {
-                respondBtn.addEventListener('click', () => {
-                    const selected = card.querySelector('.alternative-item.selected');
-                    if (selected) {
-                        this.handleAnswer(q, selected.dataset.letter);
-                    }
-                });
-            }
-
-            const toggleComment = card.querySelector('.btn-toggle-comments');
-            const commentArea = card.querySelector('.q-comments-area');
-            toggleComment.addEventListener('click', () => {
-                const isActive = commentArea.classList.toggle('active');
-                if (isActive && !card.dataset.editorInit && window.MarkdownEditor) {
-                    new MarkdownEditor(`editor-container-${q.id}`);
-                    card.dataset.editorInit = 'true';
-                }
-            });
-
-            const saveBtn = card.querySelector('.btn-save-comment');
-            const textarea = card.querySelector('textarea');
-            saveBtn.addEventListener('click', () => {
-                this.saveComment(q.id, textarea.value);
-            });
-        });
-    }
-
-    handleAnswer(question, answerLetter) {
-        const isCorrect = answerLetter === question.answer_key;
-        if (!this.userProgress[question.id]) this.userProgress[question.id] = {};
-        this.userProgress[question.id].status = isCorrect ? 'correct' : 'incorrect';
-        this.userProgress[question.id].userAnswer = answerLetter;
-        this.userProgress[question.id].answeredAt = new Date().toISOString();
-        this.saveUserProgress();
-        this.renderQuestions();
-
-        // Animations
-        if (isCorrect) {
-            this.triggerConfetti();
-        } else {
-            this.triggerShake(question.id);
-        }
-    }
-
-    triggerConfetti() {
-        const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
-
-        for (let i = 0; i < 100; i++) {
-            const confetti = document.createElement('div');
-            confetti.classList.add('confetti');
-            document.body.appendChild(confetti);
-
-            const left = Math.random() * 100 + 'vw';
-            const animDuration = Math.random() * 3 + 2 + 's';
-            const bg = colors[Math.floor(Math.random() * colors.length)];
-
-            confetti.style.left = left;
-            confetti.style.backgroundColor = bg;
-            confetti.style.animationDuration = animDuration;
-
-            // Cleanup
-            setTimeout(() => confetti.remove(), 5000);
-        }
-    }
-
-    triggerShake(qId) {
-        const card = document.querySelector(`.question-card[data-id="${qId}"]`);
-        if (card) {
-            card.classList.add('shake-animation');
-            card.addEventListener('animationend', () => {
-                card.classList.remove('shake-animation');
-            }, { once: true });
-        }
-    }
-
-    saveComment(qId, text) {
-        if (!this.userProgress[qId]) this.userProgress[qId] = {};
-        this.userProgress[qId].comments = text;
-        this.saveUserProgress();
-        this.showSuccess('Comentário salvo');
-        this.renderQuestions();
-    }
-
-    updatePagination(totalPages) {
-        const container = document.getElementById('page-numbers');
-        container.innerHTML = '';
-
-        const createPageBtn = (page, isActive = false) => {
-            const btn = document.createElement('div');
-            btn.className = `page-number ${isActive ? 'active' : ''}`;
-            btn.textContent = page;
-            btn.onclick = () => {
-                if (this.currentPage !== page) {
-                    this.currentPage = page;
-                    this.changePage();
-                }
-            };
-            return btn;
-        };
-
-        const createDots = () => {
-            const span = document.createElement('span');
-            span.className = 'page-dots';
-            span.textContent = '...';
-            return span;
-        };
-
-        // Smart Pagination Logic
-        if (totalPages <= 7) {
-            for (let i = 1; i <= totalPages; i++) {
-                container.appendChild(createPageBtn(i, i === this.currentPage));
-            }
-        } else {
-            // Always show first
-            container.appendChild(createPageBtn(1, 1 === this.currentPage));
-
-            if (this.currentPage > 3) {
-                container.appendChild(createDots());
-            }
-
-            // Neighbors
-            let start = Math.max(2, this.currentPage - 1);
-            let end = Math.min(totalPages - 1, this.currentPage + 1);
-
-            // Adjust if near start or end to keep constant number of items approximately
-            if (this.currentPage <= 3) {
-                end = 4;
-            }
-            if (this.currentPage >= totalPages - 2) {
-                start = totalPages - 3;
-            }
-
-            for (let i = start; i <= end; i++) {
-                container.appendChild(createPageBtn(i, i === this.currentPage));
-            }
-
-            if (this.currentPage < totalPages - 2) {
-                container.appendChild(createDots());
-            }
-
-            // Always show last
-            container.appendChild(createPageBtn(totalPages, totalPages === this.currentPage));
-        }
-
-        const prevBtn = document.getElementById('prev-page');
-        const nextBtn = document.getElementById('next-page');
-
-        // Update Button States and Content
-        if (prevBtn) {
-            prevBtn.disabled = this.currentPage === 1;
-            prevBtn.innerHTML = '‹ Anterior'; // Using chevron
-            prevBtn.onclick = () => {
-                if (this.currentPage > 1) {
-                    this.currentPage--;
-                    this.changePage();
-                }
-            };
-        }
-
-        if (nextBtn) {
-            nextBtn.disabled = this.currentPage === totalPages;
-            nextBtn.innerHTML = 'Próxima ›';
-            nextBtn.onclick = () => {
-                if (this.currentPage < totalPages) {
-                    this.currentPage++;
-                    this.changePage();
-                }
-            };
-        }
-    }
-
-    changePage() {
-        this.currentFocusIndex = -1;
-        if (document.body.classList.contains('focus-mode-active')) this.exitFocusMode();
-        this.renderQuestions();
-        window.scrollTo(0, 0);
-    }
-
-    updateStats() {
-        const total = this.allQuestions.length;
-        const answered = Object.values(this.userProgress).filter(p => p.status).length;
-        const correct = Object.values(this.userProgress).filter(p => p.status === 'correct').length;
-        const rate = answered ? Math.round((correct / answered) * 100) : 0;
-
-        const elTotal = document.getElementById('total-questions-stats');
-        if (elTotal) elTotal.textContent = total;
-        const elAns = document.getElementById('total-answered-stats');
-        if (elAns) elAns.textContent = answered;
-        const elRate = document.getElementById('success-rate-stats');
-        if (elRate) elRate.textContent = `${rate}%`;
-    }
-
-    setupKeyboardShortcuts() {
-        document.addEventListener('keydown', (e) => {
-            // Ignore key events if typing in an input or textarea
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-            // PAGE NAVIGATION (Ctrl + Shift + Arrows)
-            if (e.ctrlKey && e.shiftKey) {
-                if (e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    if (this.currentPage < Math.ceil(this.filteredQuestions.length / this.questionsPerPage)) {
-                        this.currentFocusIndex = -1; // Reset focus
-                        if (document.body.classList.contains('focus-mode-active')) this.exitFocusMode();
-                        document.getElementById('next-page').click();
-                    }
-                    return;
-                }
-                if (e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    if (this.currentPage > 1) {
-                        this.currentFocusIndex = -1; // Reset focus
-                        if (document.body.classList.contains('focus-mode-active')) this.exitFocusMode();
-                        document.getElementById('prev-page').click();
-                    }
-                    return;
-                }
-            }
-
-            // QUESTION NAVIGATION (Ctrl + Arrows)
-            if (e.ctrlKey && !e.shiftKey) {
-                const questions = document.querySelectorAll('.question-card');
-                if (questions.length === 0) return;
-
-                if (e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    if (this.currentFocusIndex < questions.length - 1) {
-                        this.currentFocusIndex++;
-                        this.updateFocusVisuals();
-                    }
-                    return;
-                }
-                if (e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    if (this.currentFocusIndex > 0) {
-                        this.currentFocusIndex--;
-                        this.updateFocusVisuals();
-                    } else if (this.currentFocusIndex === -1) {
-                        this.currentFocusIndex = 0;
-                        this.updateFocusVisuals();
-                    }
-                    return;
-                }
-            }
-
-            // ALTERNATIVE ACTIONS (A-E)
-            const key = e.key.toUpperCase();
-            if (['A', 'B', 'C', 'D', 'E'].includes(key)) {
-                if (this.currentFocusIndex === -1) return; // Only when a question is focused
-
-                const questions = document.querySelectorAll('.question-card');
-                const card = questions[this.currentFocusIndex];
-                if (!card) return;
-
-                const alt = card.querySelector(`.alternative-item[data-letter="${key}"]`);
-                if (!alt) return;
-
-                if (e.shiftKey) {
-                    // ELIMINATE (Shift + Letter)
-                    const eliminateBtn = alt.querySelector('.btn-eliminate');
-                    if (eliminateBtn) eliminateBtn.click();
-                } else {
-                    // SELECT (Letter)
-                    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-                        // Check if question is already answered
-                        const qId = card.dataset.id;
-                        const progress = this.userProgress[qId];
-                        if (!progress || !progress.status) {
-                            alt.click();
-                        }
+                if (eliminateBtn) eliminateBtn.click();
+            } else {
+                // SELECT (Letter)
+                if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+                    // Check if question is already answered
+                    const qId = card.dataset.id;
+                    const progress = this.userProgress[qId];
+                    if (!progress || !progress.status) {
+                        alt.click();
                     }
                 }
             }
+        }
 
-            // RESPOND (Enter)
-            if (e.key === 'Enter') {
-                if (this.currentFocusIndex === -1) return;
-                const questions = document.querySelectorAll('.question-card');
-                const card = questions[this.currentFocusIndex];
-                if (!card) return;
+        // RESPOND (Enter)
+        if (e.key === 'Enter') {
+            if (this.currentFocusIndex === -1) return;
+            const questions = document.querySelectorAll('.question-card');
+            const card = questions[this.currentFocusIndex];
+            if (!card) return;
 
-                const respondBtn = card.querySelector('.btn-respond');
-                if (respondBtn && !respondBtn.disabled) respondBtn.click();
-            }
-        });
-    } // End setupKeyboardShortcuts
+            const respondBtn = card.querySelector('.btn-respond');
+            if (respondBtn && !respondBtn.disabled) respondBtn.click();
+        }
+    });
+} // End setupKeyboardShortcuts
 
     async handleLogin(email, password) {
-        const errorMsg = document.getElementById('auth-error-msg');
-        errorMsg.style.display = 'none';
+    const errorMsg = document.getElementById('auth-error-msg');
+    errorMsg.style.display = 'none';
 
-        try {
-            await firebase.auth().signInWithEmailAndPassword(email, password);
-            // Observer in checkAuth will handle the transition
-        } catch (error) {
-            console.error('Login Error:', error);
-            errorMsg.textContent = this.getAuthErrorMessage(error.code);
-            errorMsg.style.display = 'block';
-        }
+    try {
+        await firebase.auth().signInWithEmailAndPassword(email, password);
+        // Observer in checkAuth will handle the transition
+    } catch (error) {
+        console.error('Login Error:', error);
+        errorMsg.textContent = this.getAuthErrorMessage(error.code);
+        errorMsg.style.display = 'block';
     }
+}
 
     async handleSignUp(email, password) {
-        const errorMsg = document.getElementById('auth-error-msg');
-        errorMsg.style.display = 'none';
+    const errorMsg = document.getElementById('auth-error-msg');
+    errorMsg.style.display = 'none';
 
-        try {
-            const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
-            // Create user document in Firestore
-            await firebase.firestore().collection('users').doc(userCredential.user.uid).set({
-                email: email,
-                createdAt: new Date(),
-                progress: {}
-            });
-            // Observer handles transition
-        } catch (error) {
-            console.error('Signup Error:', error);
-            errorMsg.textContent = this.getAuthErrorMessage(error.code);
-            errorMsg.style.display = 'block';
-        }
+    try {
+        const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+        // Create user document in Firestore
+        await firebase.firestore().collection('users').doc(userCredential.user.uid).set({
+            email: email,
+            createdAt: new Date(),
+            progress: {}
+        });
+        // Observer handles transition
+    } catch (error) {
+        console.error('Signup Error:', error);
+        errorMsg.textContent = this.getAuthErrorMessage(error.code);
+        errorMsg.style.display = 'block';
     }
+}
 
     async handleLogout() {
-        try {
-            await firebase.auth().signOut();
-            window.location.reload(); // Reload to clear state cleanly
-        } catch (error) {
-            console.error('Logout Error:', error);
-        }
+    try {
+        await firebase.auth().signOut();
+        window.location.reload(); // Reload to clear state cleanly
+    } catch (error) {
+        console.error('Logout Error:', error);
     }
+}
 
-    getAuthErrorMessage(code) {
-        switch (code) {
-            case 'auth/invalid-email': return 'Email inválido.';
-            case 'auth/user-disabled': return 'Este usuário foi desativado.';
-            case 'auth/user-not-found': return 'Usuário não encontrado. Crie uma conta.';
-            case 'auth/wrong-password': return 'Senha incorreta.';
-            case 'auth/email-already-in-use': return 'Este email já está cadastrado.';
-            case 'auth/weak-password': return 'A senha deve ter pelo menos 6 caracteres.';
-            default: return 'Erro ao autenticar. Tente novamente.';
-        }
+getAuthErrorMessage(code) {
+    switch (code) {
+        case 'auth/invalid-email': return 'Email inválido.';
+        case 'auth/user-disabled': return 'Este usuário foi desativado.';
+        case 'auth/user-not-found': return 'Usuário não encontrado. Crie uma conta.';
+        case 'auth/wrong-password': return 'Senha incorreta.';
+        case 'auth/email-already-in-use': return 'Este email já está cadastrado.';
+        case 'auth/weak-password': return 'A senha deve ter pelo menos 6 caracteres.';
+        default: return 'Erro ao autenticar. Tente novamente.';
     }
+}
 
-        // Click outside to exit focus mode
-        document.addEventListener('click', (e) => {
+// Click outside to exit focus mode
+document.addEventListener('click', (e) => {
     if (document.body.classList.contains('focus-mode-active')) {
         const focusedCard = document.querySelector('.question-card.focused');
 
