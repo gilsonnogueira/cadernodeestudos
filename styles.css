@@ -1078,3 +1078,41 @@ body.focus-mode-active .question-card.focused {
         transform: translateY(100vh) rotate(720deg);
     }
 }
+
+/* Site Footer */
+.site-footer {
+    padding: 40px 20px;
+    margin-top: 60px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+    color: var(--text-secondary);
+    background-color: var(--bg-card);
+}
+
+.footer-content p {
+    margin: 8px 0;
+    font-size: 0.95rem;
+}
+
+.footer-subtext {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+
+.heart-icon {
+    color: #e25555;
+    animation: heartbeat 1.5s infinite;
+    display: inline-block;
+}
+
+@keyframes heartbeat {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+}
