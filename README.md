@@ -1,74 +1,16 @@
-# Caderno de Estudos - Banco de Questões
+# React + Vite
 
-Uma interface moderna, elegante e interativa para estudo e resolução de questões de concursos públicos. Este projeto permite carregar bancos de questões locais, filtrar, responder e acompanhar seu desempenho com uma experiência visual premium.
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
-![Preview](./preview.png)
+Currently, two official plugins are available:
 
-## ✨ Funcionalidades
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-### 🎯 Resolução Interativa
+## React Compiler
 
-- **Feedback Visual Instantâneo:** Animações de celebração (Confetti 🎉) ao acertar e vibração (Shake ❌) ao errar.
-- **Eliminação de Alternativas:** Ferramenta de tachar (✂️) alternativas incorretas para facilitar a análise.
-- **Comentários Pessoais:** Editor de texto rico para fazer anotações em cada questão.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-### 🧠 Modo Foco & Atalhos
+## Expanding the ESLint configuration
 
-Navegue e responda sem tirar as mãos do teclado.
-
-- **Navegação:** `Ctrl + Setas` (Questões) | `Ctrl + Shift + Setas` (Páginas).
-- **Seleção:** Teclas `A`, `B`, `C`, `D`, `E` para selecionar alternativas.
-- **Eliminação:** `Shift + [Letra]` para riscar a alternativa.
-- **Responder:** `Enter`.
-- **Foco Visual:** Destaque na questão ativa, escurecendo as demais para evitar distrações.
-
-### 📊 Organização e Filtros
-
-- **Metadados Completos:** Visualização clara de Banca, Ano, Órgão e Cargo através de badges coloridos.
-- **Filtros Avançados:** Filtre por Disciplina, Assunto, Banca, Ano e Modalidade.
-- **Taxonomia Hierárquica:** Suporte a árvore de assuntos para estudos direcionados.
-
-### 📤 Exportação
-
-- **Markdown:** Gere arquivos formatados para aplicativos de notas (Obsidian, Notion).
-- **DOCX:** Exporte cadernos de prova formatados para impressão ou edição no Word.
-- **Layout de Impressão:** Quebras de página inteligentes e formatação limpa.
-
-### 🚀 Performance
-
-- **Paginação Inteligente:** Navegação rápida entre milhares de questões.
-- **Funcionamento Offline:** Todo o processamento é feito no navegador, garantindo velocidade e privacidade.
-
-## 🛠️ Instalação e Uso
-
-1. **Clone o repositório:**
-
-   ```bash
-   git clone https://github.com/seu-usuario/cadernodeestudos.git
-   ```
-
-2. **Abra o projeto:**
-   Basta abrir o arquivo `index.html` em qualquer navegador moderno.
-
-3. **Carregando Questões:**
-   O sistema espera um arquivo `questoes.json` estruturado. Caso utilize a extensão auxiliar, basta exportar o banco e atualizar o arquivo de dados.
-
-## ⌨️ Atalhos de Teclado
-
-| Ação | Atalho |
-|--------|--------|
-| Próxima Questão | `Ctrl` + `→` |
-| Questão Anterior | `Ctrl` + `←` |
-| Próxima Página | `Ctrl` + `Shift` + `→` |
-| Página Anterior | `Ctrl` + `Shift` + `←` |
-| Selecionar Alternativa | `A`, `B`, `C`, `D`, `E` |
-| Riscar Alternativa | `Shift` + `A`, `B`... |
-| Confirmar Resposta | `Enter` |
-| Sair do Modo Foco | `Esc` ou Clique fora |
-
-## 🎨 Personalização
-
-O projeto utiliza variáveis CSS modernas (`var(--primary)`, etc.) em `styles.css`, facilitando a personalização de cores e temas.
-
----
-*Desenvolvido para otimizar a rotina de estudos de alto rendimento.*
+If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
