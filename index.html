@@ -10,8 +10,6 @@
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📚</text></svg>">
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-
 </head>
 
 <body>
@@ -26,47 +24,11 @@
             <nav class="main-nav" style="margin-left: auto;">
                 <button class="nav-item active" data-tab="questions">Questões</button>
                 <button class="nav-item" data-tab="performance">Desempenho</button>
-                <button class="nav-item logout-btn" id="btn-logout"
-                    style="display:none; color: var(--error); border-color: var(--error-light);">Sair</button>
             </nav>
         </div>
     </header>
 
     <div class="container">
-
-        <!-- Auth/Login View -->
-        <div id="auth-view" class="view-section" style="display: none;"> <!-- Will be logic controlled later -->
-            <div class="auth-container">
-                <div class="auth-card">
-                    <div class="auth-header">
-                        <div class="logo-icon large">📚</div>
-                        <h2>Bem-vindo ao CQ</h2>
-                        <p id="auth-subtitle">Faça login para sincronizar seu progresso.</p>
-                    </div>
-
-                    <form id="auth-form">
-                        <div class="form-group">
-                            <label class="sr-only" for="auth-email">Email</label>
-                            <input type="email" id="auth-email" placeholder="seu@email.com" class="form-input" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="sr-only" for="auth-password">Senha</label>
-                            <input type="password" id="auth-password" placeholder="Sua senha" class="form-input"
-                                required minlength="6">
-                        </div>
-
-                        <div id="auth-error-msg" class="error-message" style="display:none;"></div>
-
-                        <button type="submit" class="btn btn-primary full-width" id="btn-auth-submit">Entrar</button>
-                    </form>
-
-                    <div class="auth-footer">
-                        <p id="auth-toggle-text">Não tem conta? <a href="#" id="auth-toggle-link">Cadastre-se</a></p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Stats View (Hidden by default, used for Desempenho tab) -->
         <div id="performance-view" class="view-section" style="display: none;">
             <div class="empty-state">
@@ -245,13 +207,12 @@
         </div>
     </footer>
 
-    <script src="taxonomy_data.js?v=3" defer></script>
-    <script src="taxonomy.js?v=3" defer></script>
-    <script src="multiselect.js?v=3" defer></script>
-    <script src="markdown-editor.js?v=3" defer></script>
-    <script src="questions_db.js?v=6" defer></script> <!-- Banco de Dados Offline (Assíncrono) -->
-
-    <script src="app.js?v=6" defer></script>
+    <script src="taxonomy_data.js?v=3"></script>
+    <script src="taxonomy.js?v=3"></script>
+    <script src="multiselect.js?v=3"></script>
+    <script src="markdown-editor.js?v=3"></script>
+    <script src="questions_db.js"></script> <!-- Banco de Dados Offline -->
+    <script src="app.js?v=3"></script>
 </body>
 
 </html>
