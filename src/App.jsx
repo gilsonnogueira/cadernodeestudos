@@ -1,45 +1,42 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { QuestionProvider } from './contexts/QuestionContext';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Login from './pages/Login/Login';
+import Layout from './components/UI/Layout';
 
-// Placeholder for Dashboard (we will build this next)
-const Dashboard = () => (
-  <div style={{ padding: '2rem' }}>
-    <h1>Dashboard</h1>
-    <p>Bem-vindo ao sistema de questões!</p>
-    <a href="/study" style={{ display: 'block', marginTop: '1rem' }}>Ir para Questões</a>
-  </div>
-);
-
-// Placeholder for Study Mode
-const Study = () => (
-  <div style={{ padding: '2rem' }}>
-    <h1>Modo Estudo</h1>
-    <p>Aqui aparecerão as questões.</p>
-  </div>
-);
+import Dashboard from './pages/Dashboard/Dashboard';
+import Study from './pages/Study/Study';
 
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/study" element={
-            <ProtectedRoute>
-              <Study />
-            </ProtectedRoute>
-          } />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Router>
+      <QuestionProvider>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/study" element={
+              <ProtectedRoute>
+                <Layout>
+                  <Study />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Router>
+      </QuestionProvider>
     </AuthProvider>
   );
 }

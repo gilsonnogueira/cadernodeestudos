@@ -3,6 +3,9 @@ import {
     onAuthStateChanged,
     signInWithPopup,
     GoogleAuthProvider,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    sendPasswordResetEmail,
     signOut as firebaseSignOut
 } from "firebase/auth";
 import { auth } from "../services/firebase";
@@ -23,9 +26,24 @@ export function AuthProvider({ children }) {
         try {
             await signInWithPopup(auth, provider);
         } catch (error) {
-            console.error("Error signing in", error);
+            console.error("Error signing in with Google", error);
             throw error;
         }
+    }
+
+    // Sign in with Email/Password
+    function login(email, password) {
+        return signInWithEmailAndPassword(auth, email, password);
+    }
+
+    // Sign up with Email/Password
+    function signup(email, password) {
+        return createUserWithEmailAndPassword(auth, email, password);
+    }
+
+    // Reset Password
+    function resetPassword(email) {
+        return sendPasswordResetEmail(auth, email);
     }
 
     // Logout
@@ -45,8 +63,11 @@ export function AuthProvider({ children }) {
     const value = {
         currentUser,
         signInWithGoogle,
+        login,
+        signup,
+        resetPassword,
         logout,
-        isAdmin: false // Temp placeholder, will connect to roles logic later
+        isAdmin: false
     };
 
     return (
