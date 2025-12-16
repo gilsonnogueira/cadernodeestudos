@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import questionsData from '../services/questions.json';
+import { taxonomyParser } from '../utils/TaxonomyParser';
+import { TAXONOMY_RAW_DATA } from '../services/taxonomyData';
+import { PersistenceService } from '../services/persistence';
+import { useAuth } from './AuthContext';
 
 const QuestionContext = createContext();
 
@@ -8,8 +12,58 @@ export function useQuestions() {
 }
 
 export function QuestionProvider({ children }) {
+    const { currentUser } = useAuth();
     const [allQuestions, setAllQuestions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [userProgress, setUserProgress] = useState({});
+
+    // Initialize Taxonomy & Load Questions & Progress
+    useEffect(() => {
+        // 1. Taxonomy
+        if (TAXONOMY_RAW_DATA) {
+            taxonomyParser.parse(TAXONOMY_RAW_DATA);
+        }
+
+        // 2. Questions
+        console.log(`Loaded ${questionsData.length} questions`);
+        const qData = questionsData.map((q, idx) => ({
+            ...q,
+            id: q.id || `q-${idx}`
+        }));
+        setAllQuestions(qData);
+        setLoading(false);
+
+        // 3. Local Progress
+        const saved = PersistenceService.getLocalProgress();
+        setUserProgress(saved);
+    }, []);
+
+    // Sync with Firestore
+    useEffect(() => {
+        if (currentUser) {
+            PersistenceService.syncWithFirestore(currentUser.uid, userProgress)
+                .then(merged => setUserProgress(merged));
+        }
+    }, [currentUser]);
+
+    // Action: Answer Question
+    const answerQuestion = (questionId, isCorrect, selectedOption) => {
+        const newEntry = {
+            status: isCorrect ? 'correct' : 'wrong',
+            answer: selectedOption,
+            timestamp: Date.now()
+        };
+
+        setUserProgress(prev => {
+            const next = { ...prev, [questionId]: newEntry };
+            PersistenceService.saveLocalProgress(next);
+            if (currentUser) {
+                // Fire & Forget sync for responsiveness
+                PersistenceService.syncWithFirestore(currentUser.uid, next);
+            }
+            return next;
+        });
+    };
 
     // Filters
     const [filters, setFilters] = useState({
@@ -24,14 +78,6 @@ export function QuestionProvider({ children }) {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
-    // Load questions on mount
-    useEffect(() => {
-        // Simulate async load if needed, for now direct import
-        console.log(`Loaded ${questionsData.length} questions`);
-        setAllQuestions(questionsData);
-        setLoading(false);
-    }, []);
-
     // Unique values for filter dropdowns
     const availableFilters = useMemo(() => {
         const disciplines = [...new Set(allQuestions.map(q => q.discipline).filter(Boolean))].sort();
@@ -41,18 +87,11 @@ export function QuestionProvider({ children }) {
         return { disciplines, bancas, years };
     }, [allQuestions]);
 
-    // Derived subjects based on selected discipline
+    // Derived subjects based on selected discipline (Hierarchical)
     const availableSubjects = useMemo(() => {
         if (!filters.discipline) return [];
-        const subjects = new Set();
-        allQuestions
-            .filter(q => q.discipline === filters.discipline)
-            .forEach(q => {
-                if (Array.isArray(q.subjects)) q.subjects.forEach(s => subjects.add(s));
-                else if (typeof q.subjects === 'string') subjects.add(q.subjects);
-            });
-        return [...subjects].sort();
-    }, [allQuestions, filters.discipline]);
+        return taxonomyParser.getSubjectsForDiscipline(filters.discipline);
+    }, [filters.discipline]);
 
     // Filtered Questions Logic
     const filteredQuestions = useMemo(() => {
@@ -60,20 +99,22 @@ export function QuestionProvider({ children }) {
             // Discipline
             if (filters.discipline && q.discipline !== filters.discipline) return false;
 
-            // Subject (Check if array contains or string matches)
+            // Subject
             if (filters.subject) {
                 if (Array.isArray(q.subjects)) {
-                    if (!q.subjects.includes(filters.subject)) return false;
-                } else if (q.subjects !== filters.subject) return false;
+                    if (!q.subjects.some(s => s.toLowerCase().includes(filters.subject.toLowerCase()))) return false;
+                } else if (typeof q.subjects === 'string') {
+                    if (!q.subjects.toLowerCase().includes(filters.subject.toLowerCase())) return false;
+                }
             }
 
             // Banca
             if (filters.banca && q.banca !== filters.banca) return false;
 
             // Year
-            if (filters.year && q.year !== filters.year) return false;
+            if (filters.year && q.year.toString() !== filters.year) return false;
 
-            // Search (Content or ID)
+            // Search
             if (filters.search) {
                 const lowerSearch = filters.search.toLowerCase();
                 const contentMatch = q.enunciation?.toLowerCase().includes(lowerSearch) ||
@@ -103,7 +144,9 @@ export function QuestionProvider({ children }) {
         filters,
         setFilters,
         availableFilters,
-        availableSubjects
+        availableSubjects,
+        userProgress,
+        answerQuestion
     };
 
     return (

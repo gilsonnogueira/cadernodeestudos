@@ -1,14 +1,42 @@
-import React, { useState } from 'react';
-import { CheckCircle, XCircle, Eraser, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle, XCircle, Eraser } from 'lucide-react';
+import confetti from 'canvas-confetti';
+import { useQuestions } from '../../contexts/QuestionContext';
 
 export default function QuestionCard({ question }) {
+    const { answerQuestion, userProgress } = useQuestions();
     const [selectedAlternative, setSelectedAlternative] = useState(null);
     const [showResult, setShowResult] = useState(false);
     const [excludedOptions, setExcludedOptions] = useState([]);
 
+    // Check if question was already answered
+    useEffect(() => {
+        if (userProgress && userProgress[question.id]) {
+            const saved = userProgress[question.id];
+            setSelectedAlternative(saved.answer);
+            setShowResult(true);
+        } else {
+            // Reset if not answered
+            setSelectedAlternative(null);
+            setShowResult(false);
+            setExcludedOptions([]);
+        }
+    }, [question, userProgress]);
+
     if (!question) return null;
 
     const isCorrect = selectedAlternative === question.answer_key;
+
+    // Trigger Confetti
+    useEffect(() => {
+        if (showResult && isCorrect) {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
+        }
+    }, [showResult, isCorrect]);
 
     function handleSelect(letter) {
         if (showResult) return;
@@ -16,7 +44,7 @@ export default function QuestionCard({ question }) {
     }
 
     function toggleExclusion(letter, e) {
-        e.stopPropagation();
+        if (e) e.stopPropagation();
         if (showResult) return;
 
         setExcludedOptions(prev =>
@@ -28,8 +56,43 @@ export default function QuestionCard({ question }) {
 
     function handleConfirm() {
         if (!selectedAlternative) return;
+
+        const isAnswerCorrect = selectedAlternative === question.answer_key;
         setShowResult(true);
+
+        // Save to context/persistence
+        if (answerQuestion) {
+            answerQuestion(question.id, isAnswerCorrect, selectedAlternative);
+        }
     }
+
+    // Keyboard Shortcuts
+    useEffect(() => {
+        function handleKeyDown(e) {
+            // Ignore if typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            const key = e.key.toUpperCase();
+
+            // Confirm with Enter
+            if (e.key === 'Enter' && selectedAlternative && !showResult) {
+                handleConfirm();
+                return;
+            }
+
+            // Select A-E
+            if (['A', 'B', 'C', 'D', 'E'].includes(key)) {
+                if (e.shiftKey) {
+                    toggleExclusion(key);
+                } else {
+                    handleSelect(key);
+                }
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedAlternative, showResult, excludedOptions]);
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6 transition-all hover:shadow-md">
@@ -90,8 +153,8 @@ export default function QuestionCard({ question }) {
                             {!showResult && (
                                 <button
                                     onClick={(e) => toggleExclusion(alt.letter, e)}
-                                    className={`absolute right-4 top-4 p-1 rounded-full hover:bg-gray-200 text-gray-400 hover:text-gray-600 ${isExcluded ? 'text-red-500 bg-red-100' : ''}`}
-                                    title="Tachar alternativa"
+                                    className={`absolute right-4 top-4 p-1 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 ${isExcluded ? 'text-red-500 bg-red-100 hover:text-red-700 hover:bg-red-200' : ''}`}
+                                    title="Tachar alternativa (Shift + Letra)"
                                 >
                                     <Eraser size={16} />
                                 </button>
@@ -114,19 +177,28 @@ export default function QuestionCard({ question }) {
                     <button
                         onClick={handleConfirm}
                         disabled={!selectedAlternative}
-                        className={`px-6 py-2.5 rounded-lg font-semibold text-white transition-all shadow-md
+                        className={`px-6 py-2.5 rounded-lg font-semibold text-white transition-all shadow-md transform active:scale-95
                     ${selectedAlternative
-                                ? 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg transform active:scale-95'
+                                ? 'bg-orange-500 hover:bg-orange-600 hover:shadow-lg'
                                 : 'bg-gray-300 cursor-not-allowed'}
                 `}
                     >
                         Responder
                     </button>
                 ) : (
-                    <div className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold ${isCorrect ? 'text-green-700 bg-green-100' : 'text-red-700 bg-red-100'}`}>
-                        {isCorrect ? 'Parabéns! Você acertou.' : `Ops! A resposta correta era a letra ${question.answer_key}.`}
+                    <div className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold w-full justify-center transition-colors duration-500 ${isCorrect ? 'text-green-700 bg-green-100 border border-green-200' : 'text-red-700 bg-red-100 border border-red-200'}`}>
+                        {isCorrect ? (
+                            <span className="flex items-center gap-2">🎉 Parabéns! Você acertou!</span>
+                        ) : (
+                            <span className="flex items-center gap-2">❌ Ops! A resposta correta era a letra {question.answer_key}.</span>
+                        )}
                     </div>
                 )}
+            </div>
+
+            {/* Keyboard Shortcuts Hint */}
+            <div className="mt-4 text-center text-xs text-gray-400">
+                Atalhos: [A-E] Selecionar • [Shift + A-E] Riscar • [Enter] Responder
             </div>
         </div>
     );

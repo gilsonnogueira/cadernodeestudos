@@ -75,8 +75,15 @@ export default function Study() {
                             disabled={!filters.discipline}
                         >
                             <option value="">Todos</option>
-                            {availableSubjects.map(s => (
-                                <option key={s} value={s}>{s}</option>
+                            {availableSubjects.map((s, index) => (
+                                <option
+                                    key={`${s.value}-${index}`}
+                                    value={s.value}
+                                    style={{ fontWeight: s.level === 0 ? 'bold' : 'normal', paddingLeft: `${s.level * 10}px` }}
+                                >
+                                    {/* Visual indentation with non-breaking spaces for select options */}
+                                    {'\u00A0\u00A0'.repeat(s.level)}{s.level > 0 ? '↳ ' : ''}{s.value}
+                                </option>
                             ))}
                         </select>
                     </div>
