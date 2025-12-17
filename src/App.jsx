@@ -13,7 +13,7 @@ function App() {
   return (
     <AuthProvider>
       <QuestionProvider>
-        <Router>
+        <Router basename="/cadernodeestudos">
           <Routes>
             <Route path="/login" element={<Login />} />
 
