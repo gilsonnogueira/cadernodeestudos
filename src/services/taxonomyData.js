@@ -1,4 +1,4 @@
-const TAXONOMY_RAW_DATA = `Português
+export const TAXONOMY_RAW_DATA = `Português
 1. Ortografia
 1.1 Grafia e Emprego de Iniciais Maiúsculas
 1.2 Parônimos e Homônimos
