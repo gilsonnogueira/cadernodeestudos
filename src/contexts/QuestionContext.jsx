@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
-import questionsData from '../services/questions.json';
+import { loadQuestions } from '../services/questionsLoader';
 import { taxonomyParser } from '../utils/TaxonomyParser';
 import { TAXONOMY_RAW_DATA } from '../services/taxonomyData';
 import { PersistenceService } from '../services/persistence';
@@ -15,6 +15,7 @@ export function QuestionProvider({ children }) {
     const { currentUser } = useAuth();
     const [allQuestions, setAllQuestions] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
     const [userProgress, setUserProgress] = useState({});
 
     // Initialize Taxonomy & Load Questions & Progress
@@ -24,14 +25,22 @@ export function QuestionProvider({ children }) {
             taxonomyParser.parse(TAXONOMY_RAW_DATA);
         }
 
-        // 2. Questions
-        console.log(`Loaded ${questionsData.length} questions`);
-        const qData = questionsData.map((q, idx) => ({
-            ...q,
-            id: q.id || `q-${idx}`
-        }));
-        setAllQuestions(qData);
-        setLoading(false);
+        // 2. Questions - Load asynchronously
+        loadQuestions()
+            .then(questionsData => {
+                console.log(`Loaded ${questionsData.length} questions`);
+                const qData = questionsData.map((q, idx) => ({
+                    ...q,
+                    id: q.id || `q-${idx}`
+                }));
+                setAllQuestions(qData);
+                setLoading(false);
+            })
+            .catch(err => {
+                console.error('Failed to load questions:', err);
+                setLoadError(err.message);
+                setLoading(false);
+            });
 
         // 3. Local Progress
         const saved = PersistenceService.getLocalProgress();
@@ -136,7 +145,9 @@ export function QuestionProvider({ children }) {
 
     const value = {
         loading,
+        loadError,
         questions: paginatedQuestions,
+        allQuestions,
         totalQuestions: filteredQuestions.length,
         totalPages,
         currentPage,

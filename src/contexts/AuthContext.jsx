@@ -57,7 +57,18 @@ export function AuthProvider({ children }) {
             setLoading(false);
         });
 
-        return unsubscribe;
+        // Timeout fallback in case Firebase auth hangs
+        const timeout = setTimeout(() => {
+            if (loading) {
+                console.warn('Auth check timed out, proceeding anyway');
+                setLoading(false);
+            }
+        }, 10000);
+
+        return () => {
+            unsubscribe();
+            clearTimeout(timeout);
+        };
     }, []);
 
     const value = {
@@ -70,9 +81,39 @@ export function AuthProvider({ children }) {
         isAdmin: false
     };
 
+    // Show loading indicator while checking auth
+    if (loading) {
+        return (
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: '100vh',
+                background: '#f3f4f6'
+            }}>
+                <div style={{
+                    textAlign: 'center',
+                    color: '#6b7280'
+                }}>
+                    <div style={{
+                        width: '40px',
+                        height: '40px',
+                        border: '3px solid #e5e7eb',
+                        borderTop: '3px solid #2563eb',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite',
+                        margin: '0 auto 12px'
+                    }}></div>
+                    <p>Carregando...</p>
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <AuthContext.Provider value={value}>
-            {!loading && children}
+            {children}
         </AuthContext.Provider>
     );
 }

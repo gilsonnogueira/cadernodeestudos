@@ -27,7 +27,7 @@ export default function Dashboard() {
 
     // Calculate Performance by Discipline
     const disciplineStats = useMemo(() => {
-        if (!userProgress || !allQuestions.length) return [];
+        if (!userProgress || !allQuestions || !allQuestions.length) return [];
 
         const discMap = {};
 
